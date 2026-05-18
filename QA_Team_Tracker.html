@@ -613,27 +613,37 @@ function syncCalendarToGas(){
     });
   });
 
-  Promise.all([
-    gasCall('saveMembers', {members: members}),
-    gasCall('saveSpans',   {spans: allSpans})
-  ]).then(function(results){
+  gasCall('saveMembers', {members: members}).then(function(){
+    return pushSequential('saveSpan', 'span', allSpans);
+  }).then(function(){
     if(btn){ btn.textContent='☁ Sync to Sheets'; btn.disabled=false; }
-    var r0 = JSON.stringify(results[0]), r1 = JSON.stringify(results[1]);
-    console.log('GAS saveMembers result:', r0);
-    console.log('GAS saveSpans result:', r1);
-    var ok = results[0] && results[1];
-    if(ok && !results[0].error && !results[1].error){
-      showSyncStatus('Synced! Members:'+r0+' Spans:'+r1, true);
-    } else {
-      showSyncStatus('Sync error: '+r0+' / '+r1, false);
-    }
+    showSyncStatus('Calendar synced! '+allSpans.length+' spans written to Google Sheets', true);
+    console.log('Calendar sync complete:', allSpans.length, 'spans');
+  }).catch(function(e){
+    if(btn){ btn.textContent='☁ Sync to Sheets'; btn.disabled=false; }
+    showSyncStatus('Sync error: '+e.message, false);
   });
 }
 
+// Send records one at a time to avoid URI length limits
+function gasCallOne(action, key, record){
+  var params = {action: action};
+  params[key] = record;
+  return gasCall(action, params);
+}
+
+function pushSequential(action, key, records){
+  // Chain promises so we don't hammer the server
+  return records.reduce(function(chain, rec){
+    return chain.then(function(){ return gasCallOne(action, key, rec); });
+  }, Promise.resolve());
+}
+
 function pushAllToGas(){
-  // Push members
+  // Push members (small — bulk is fine)
   var p1 = gasCall('saveMembers', {members: members});
-  // Push all spans (seeded + custom)
+
+  // Push spans one at a time
   var allSpans = [];
   members.forEach(function(m){
     var spans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]);
@@ -641,21 +651,23 @@ function pushAllToGas(){
       allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
     });
   });
-  var p2 = gasCall('saveSpans', {spans: allSpans});
-  // Push features
-  var feats = FEATURES_DATA.map(function(f, i){
+
+  // Push features one at a time
+  var allFeats = FEATURES_DATA.map(function(f, i){
     return {
-      id: 'feat_'+i,
-      summary: f.summary||'', qa: f.qa||'', effort: f.effort||'',
-      preprod: f.preprod||'', committed: f.committed||'', comments: f.comments||'',
-      services: f.services||'', automation: f.automation||'',
-      deployed: deployedFeatures[i]?'1':'', notes: bugsData[i]||''
+      id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:f.effort||'',
+      preprod:f.preprod||'', committed:f.committed||'', comments:f.comments||'',
+      services:f.services||'', automation:f.automation||'',
+      deployed:deployedFeatures[i]?'1':'', notes:bugsData[i]||''
     };
   });
-  var p3 = gasCall('saveFeatures', {features: feats});
-  return Promise.all([p1, p2, p3]).then(function(results){
-    console.log('pushAllToGas results:', JSON.stringify(results));
-    return results;
+
+  return p1.then(function(){
+    return pushSequential('saveSpan', 'span', allSpans);
+  }).then(function(){
+    return pushSequential('saveFeature', 'feature', allFeats);
+  }).then(function(){
+    console.log('pushAllToGas complete: '+allSpans.length+' spans, '+allFeats.length+' features');
   });
 }
 
