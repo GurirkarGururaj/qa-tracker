@@ -842,16 +842,22 @@ function init(){
           // Extend FEATURES_DATA array if needed
           while(FEATURES_DATA.length <= idx) FEATURES_DATA.push({summary:'',qa:'',effort:'',preprod:'',committed:'',comments:'',services:'',automation:''});
           var fd = FEATURES_DATA[idx];
+          var needsDateFix = false;
           ['summary','qa','effort','preprod','committed','comments','services','automation'].forEach(function(field){
             if(f[field] !== undefined && f[field] !== ''){
-              // Clean date fields
               if(field==='preprod'||field==='committed'){
-                fd[field] = fmtDate(f[field]);
+                var cleaned = fmtDate(f[field]);
+                if(cleaned !== f[field]) needsDateFix = true;
+                fd[field] = cleaned;
               } else {
                 fd[field] = f[field];
               }
             }
           });
+          // Push cleaned dates back to GAS if they were raw timestamps
+          if(needsDateFix && GAS_URL){
+            gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:fd.summary||'',qa:fd.qa||'',effort:fd.effort||'',preprod:fd.preprod||'',committed:fd.committed||'',comments:fd.comments||'',services:fd.services||'',automation:fd.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}});
+          }
           if(f.deployed === '1' || f.deployed === true) deployedFeatures[idx] = true;
           if(f.notes) bugsData[idx] = f.notes;
           if(f.effort) effortData[idx] = f.effort;
