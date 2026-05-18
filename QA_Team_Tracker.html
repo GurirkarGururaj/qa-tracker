@@ -1621,8 +1621,8 @@ function upsertFromExcel(e){
       var headers = rows[0].map(function(h){ return String(h||'').trim().toLowerCase(); });
       var col = function(name){ return headers.findIndex(function(h){ return h.includes(name); }); };
 
-      var cSum     = col('feature') >= 0 ? col('feature') : col('summary');
-      var cQA      = col('qa owner') >= 0 ? col('qa owner') : col('qa');
+      var cSum     = col('summary') >= 0 ? col('summary') : (col('feature') >= 0 ? col('feature') : 0);
+      var cQA      = col('qa resource') >= 0 ? col('qa resource') : (col('qa owner') >= 0 ? col('qa owner') : col('qa'));
       var cEffort  = col('effort');
       var cPreprod = col('preprod');
       var cCommit  = col('committed');
@@ -1637,10 +1637,22 @@ function upsertFromExcel(e){
         if(!row[cSum] || !String(row[cSum]).trim()) return;
         var summary = String(row[cSum]).trim();
 
-        // Find existing feature by matching summary
+        // Find existing feature — match by ticket ID first, then exact/near summary
+        var summaryLc = summary.toLowerCase();
+        // Extract ticket ID (e.g. ZCF-2002, ZHIRE-3078) from the Excel row
+        var ticketMatch = summary.match(/[A-Z]+-\d+/i);
+        var ticketId = ticketMatch ? ticketMatch[0].toUpperCase() : null;
+
         var existIdx = FEATURES_DATA.findIndex(function(f){
-          return f.summary.toLowerCase().includes(summary.toLowerCase()) ||
-                 summary.toLowerCase().includes(f.summary.toLowerCase().substring(0,20));
+          var fLc = (f.summary||'').toLowerCase();
+          // 1. Match by ticket ID (most reliable)
+          if(ticketId && fLc.includes(ticketId.toLowerCase())) return true;
+          // 2. Exact match
+          if(fLc === summaryLc) return true;
+          // 3. One contains the other (only if summary is >15 chars to avoid false matches)
+          if(summary.length > 15 && fLc.includes(summaryLc.substring(0,25))) return true;
+          if(summary.length > 15 && summaryLc.includes(fLc.substring(0,25))) return true;
+          return false;
         });
 
         function fmt(v){
@@ -1874,10 +1886,22 @@ function upsertFromExcel(e){
         if(!row[cSum] || !String(row[cSum]).trim()) return;
         var summary = String(row[cSum]).trim();
 
-        // Find existing feature by matching summary
+        // Find existing feature — match by ticket ID first, then exact/near summary
+        var summaryLc = summary.toLowerCase();
+        // Extract ticket ID (e.g. ZCF-2002, ZHIRE-3078) from the Excel row
+        var ticketMatch = summary.match(/[A-Z]+-\d+/i);
+        var ticketId = ticketMatch ? ticketMatch[0].toUpperCase() : null;
+
         var existIdx = FEATURES_DATA.findIndex(function(f){
-          return f.summary.toLowerCase().includes(summary.toLowerCase()) ||
-                 summary.toLowerCase().includes(f.summary.toLowerCase().substring(0,20));
+          var fLc = (f.summary||'').toLowerCase();
+          // 1. Match by ticket ID (most reliable)
+          if(ticketId && fLc.includes(ticketId.toLowerCase())) return true;
+          // 2. Exact match
+          if(fLc === summaryLc) return true;
+          // 3. One contains the other (only if summary is >15 chars to avoid false matches)
+          if(summary.length > 15 && fLc.includes(summaryLc.substring(0,25))) return true;
+          if(summary.length > 15 && summaryLc.includes(fLc.substring(0,25))) return true;
+          return false;
         });
 
         function fmt(v){
