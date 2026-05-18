@@ -843,7 +843,14 @@ function init(){
           while(FEATURES_DATA.length <= idx) FEATURES_DATA.push({summary:'',qa:'',effort:'',preprod:'',committed:'',comments:'',services:'',automation:''});
           var fd = FEATURES_DATA[idx];
           ['summary','qa','effort','preprod','committed','comments','services','automation'].forEach(function(field){
-            if(f[field] !== undefined && f[field] !== '') fd[field] = f[field];
+            if(f[field] !== undefined && f[field] !== ''){
+              // Clean date fields
+              if(field==='preprod'||field==='committed'){
+                fd[field] = fmtDate(f[field]);
+              } else {
+                fd[field] = f[field];
+              }
+            }
           });
           if(f.deployed === '1' || f.deployed === true) deployedFeatures[idx] = true;
           if(f.notes) bugsData[idx] = f.notes;
@@ -892,6 +899,17 @@ function saveData(){
 
 // ═══════════════════════ DATE HELPERS ════════════════════════════════════════
 function ds(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+// Format any date string to "15 May 2026" — strips time/timezone
+function fmtDate(val){
+  if(!val) return '';
+  // Already clean short format
+  if(/^\d{1,2}\s+\w+\s+\d{4}$/.test(String(val).trim())) return val.trim();
+  // Parse date object or string
+  var d = val instanceof Date ? val : new Date(String(val).split('GMT')[0].trim());
+  if(isNaN(d.getTime())) return String(val).split(' ')[0]; // fallback: first word
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
+}
 function addDays(d,n){ var r=new Date(d); r.setDate(r.getDate()+n); return r; }
 function isToday(d){ return ds(d)===ds(new Date()); }
 function isWknd(d){ return d.getDay()===0||d.getDay()===6; }
@@ -1613,6 +1631,9 @@ function saveBugNotes(idx, val){
   var feat = FEATURES_DATA[idx];
   logChange(feat?feat.summary:'Feature '+idx, 'Testing Notes', old?'(had notes)':'(empty)', val?'(updated)':'(cleared)');
   localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
+  if(GAS_URL && feat){
+    gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:feat.summary||'',qa:feat.qa||'',effort:feat.effort||'',preprod:feat.preprod||'',committed:feat.committed||'',comments:feat.comments||'',services:feat.services||'',automation:feat.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:val}});
+  }
   // Update button indicator without full re-render
   var btn = document.getElementById('bugs-btn-'+idx);
   if(btn){
@@ -1620,6 +1641,7 @@ function saveBugNotes(idx, val){
     btn.style.borderColor = hasNotes ? '#d97706' : '#9ca3af';
     btn.style.color = hasNotes ? '#d97706' : '#9ca3af';
     btn.style.background = hasNotes ? '#fffbeb' : '#f9fafb';
+    btn.textContent = (btn.textContent.startsWith('▾') ? '▾' : '▸') + ' Notes' + (hasNotes ? ' ✎' : '');
   }
 }
 
@@ -1818,7 +1840,11 @@ function toggleBugs(idx){
   var isHidden = el.style.display === 'none';
   el.style.display = isHidden ? 'table-row' : 'none';
   var btn = document.getElementById('bugs-btn-'+idx);
-  if(btn) btn.textContent = isHidden ? '▾ Bugs ('+(bugsData[idx]||[]).length+')' : '▸ Bugs ('+(bugsData[idx]||[]).length+')';
+  if(btn){
+    var notes = bugsData[idx]||'';
+    var hasNotes = typeof notes === 'string' ? notes.trim().length > 0 : notes.length > 0;
+    btn.textContent = isHidden ? ('▾ Notes'+(hasNotes?' ✎':'')) : ('▸ Notes'+(hasNotes?' ✎':''));
+  }
 }
 
 function addBug(idx){
@@ -1934,8 +1960,8 @@ function renderFeatures(){
       +'<td contenteditable="true" style="min-width:280px;font-size:13px;font-weight:500;'+bg+'" onblur="onFieldBlur('+origIdx+',\'summary\',this)" id="summary-'+origIdx+'">'+escH(f.summary||'')+'</td>'
       +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'qa\',this)" id="qa-'+origIdx+'">'+escH(f.qa||'')+'</td>'
       +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onEffortBlur('+origIdx+',this)" id="effort-'+origIdx+'">'+escH(f.effort||'')+'</td>'
-      +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'preprod\',this)" id="preprod-'+origIdx+'">'+escH(f.preprod||'')+'</td>'
-      +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'committed\',this)" id="committed-'+origIdx+'">'+escH(f.committed||'')+'</td>'
+      +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'preprod\',this)" id="preprod-'+origIdx+'">'+escH(fmtDate(f.preprod||''))+'</td>'
+      +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'committed\',this)" id="committed-'+origIdx+'">'+escH(fmtDate(f.committed||''))+'</td>'
       +'<td contenteditable="true" style="font-size:13px;color:#374151;min-width:160px;white-space:pre-wrap;'+bg+'" onblur="onCommentsBlur('+origIdx+',this)" id="comments-'+origIdx+'">'+escH(f.comments||'')+'</td>'
       +'<td contenteditable="true" style="font-size:12px;color:#374151;'+bg+'" onblur="onFieldBlur('+origIdx+',\'services\',this)" id="services-'+origIdx+'">'+escH(f.services||'')+'</td>'
       +'<td contenteditable="true" style="font-size:12px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'automation\',this)" id="automation-'+origIdx+'">'+escH(f.automation||'')+'</td>'
