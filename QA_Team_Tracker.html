@@ -32,8 +32,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
 .main-tab.active{background:rgba(56,189,248,.15);color:#38bdf8;font-weight:600;}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:4px;flex-shrink:0;}
 .week-nav{display:flex;align-items:center;gap:6px;}
-.week-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.7);width:26px;height:26px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .15s;}
-.week-btn:hover{background:rgba(56,189,248,.2);border-color:#38bdf8;color:#38bdf8;}
+.week-btn{background:#f1f5f9;border:1px solid var(--border);color:var(--txt2);width:26px;height:26px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .15s;}
+.week-btn:hover{border-color:var(--teal);color:var(--teal);}
 .week-label{font-family:var(--mono);font-size:13px;color:rgba(255,255,255,.85);min-width:180px;text-align:center;padding:0 6px;}
 .btn{padding:0 10px;height:28px;border-radius:6px;font-family:var(--sans);font-size:11.5px;font-weight:500;cursor:pointer;transition:all .15s;border:none;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;}
 .btn-ghost{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.75);}
@@ -221,17 +221,10 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
     <div id="user-id-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer;" onclick="promptIdentity(true)" title="Click to change your name">
       <span style="font-size:10px;color:rgba(255,255,255,.35);font-family:var(--mono);">You:</span>
       <input id="user-identity" type="text" placeholder="your name"
-        style="width:88px;padding:3px 7px;border:1px solid rgba(255,255,255,.15);border-radius:5px;font-size:11px;font-family:var(--mono);outline:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.9);cursor:pointer;pointer-events:none;"
+        style="width:90px;padding:3px 7px;border:1px solid rgba(255,255,255,.15);border-radius:5px;font-size:11px;font-family:var(--mono);outline:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.9);cursor:pointer;pointer-events:none;"
         title="Click to change your name" oninput="saveIdentity()" value="" readonly/>
     </div>
-    <div id="week-nav-sep" style="width:1px;height:18px;background:rgba(255,255,255,.12);margin:0 2px;"></div>
-    <div class="week-nav" id="week-nav" style="display:flex;align-items:center;gap:3px;">
-      <button class="week-btn" onclick="shiftWeek(-1)">‹</button>
-      <div class="week-label" id="week-label"></div>
-      <button class="week-btn" onclick="shiftWeek(1)">›</button>
-      <button class="btn btn-ghost" onclick="goToday()">Today</button>
-    </div>
-    <div id="week-nav-sep2" style="width:1px;height:18px;background:rgba(255,255,255,.12);margin:0 2px;"></div>
+    <div style="width:1px;height:18px;background:rgba(255,255,255,.12);margin:0 3px;"></div>
     <button class="btn btn-ghost" id="btn-members" onclick="openMemberMgr()">⚙ Members</button>
     <button class="btn btn-ghost" id="btn-gas" onclick="openGasSettings()" title="Connect to Google Sheets">⛅ Sheets</button>
     <button class="btn btn-primary" id="btn-cal-sync" onclick="syncCalendarToGas()" style="display:none;">↑ Sync</button>
@@ -244,13 +237,21 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
   </div>
 </div>
 
-<!-- LEGEND -->
-<div class="legend-bar" id="legend-bar">
-  <span style="font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.08em;text-transform:uppercase;margin-right:4px;">TYPE:</span>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>Feature / Story</div>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Bug Fix</div>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>Leave</div>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Automation</div>
+<!-- LEGEND + WEEK NAV BAR -->
+<div class="legend-bar" id="legend-bar" style="justify-content:space-between;">
+  <div style="display:flex;align-items:center;gap:16px;">
+    <span style="font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.08em;text-transform:uppercase;margin-right:4px;">TYPE:</span>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>Feature / Story</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Bug Fix</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>Leave</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Automation</div>
+  </div>
+  <div class="week-nav" id="week-nav" style="display:flex;align-items:center;gap:4px;">
+    <button class="week-btn" onclick="shiftWeek(-1)">‹</button>
+    <div class="week-label" id="week-label"></div>
+    <button class="week-btn" onclick="shiftWeek(1)">›</button>
+    <button class="btn" onclick="goToday()" style="height:26px;padding:0 10px;font-size:11px;background:#f1f5f9;border:1px solid var(--border);color:var(--txt2);border-radius:5px;">Today</button>
+  </div>
 </div>
 
 <!-- IMPORT STATUS BAR -->
@@ -1219,7 +1220,6 @@ function switchTab(tab){
   document.getElementById('btn-export').style.display = isCal?'':'none';
   document.getElementById('btn-cal-sync').style.display = (isCal && GAS_URL)?'':'none';
   document.getElementById('user-id-wrap').style.display = isAudit?'none':'flex';
-  document.getElementById('week-nav-sep').style.display = isCal?'':'none';
   if(isFeat) renderFeatures();
   if(isAudit) renderAudit();
   // Hide import status when leaving calendar
