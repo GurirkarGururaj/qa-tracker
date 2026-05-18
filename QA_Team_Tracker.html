@@ -681,26 +681,33 @@ function init(){
     }catch(e){}
   }
   // Start at May 1 2026
-  // Restore user identity — auto-detect if not already saved
+  // Restore user identity
   var savedId = localStorage.getItem('qa_user_identity');
   if(savedId){
     document.getElementById('user-identity').value = savedId;
   } else {
-    // Try to auto-detect from Windows file path: C:/Users/<username>/...
     var autoName = '';
     try {
+      // Try Windows file path
       var pathMatch = window.location.href.match(/[\/\\][Uu]sers[\/\\]([^\/\\%]+)/);
       if(pathMatch){
         var winUser = decodeURIComponent(pathMatch[1]).toLowerCase().replace(/[.\-_]/g,' ').trim();
-        // Try to match against known members (first name or full name)
         var matched = members.find(function(m){
           var mn = m.name.toLowerCase();
-          return mn === winUser || mn.split(' ')[0] === winUser.split(' ')[0] || winUser.includes(mn.split(' ')[0]);
+          return mn===winUser || mn.split(' ')[0]===winUser.split(' ')[0] || winUser.includes(mn.split(' ')[0]);
         });
-        if(matched) autoName = matched.name;
-        else {
-          // Capitalise first letter as fallback
-          autoName = winUser.split(' ').map(function(w){ return w.charAt(0).toUpperCase()+w.slice(1); }).join(' ');
+        autoName = matched ? matched.name : winUser.split(' ').map(function(w){ return w.charAt(0).toUpperCase()+w.slice(1); }).join(' ');
+      }
+      // Try GitHub Pages URL username (gurirkargururaj.github.io → Gururaj Gurikar)
+      if(!autoName){
+        var ghMatch = window.location.hostname.match(/^([a-z0-9]+)\.github\.io$/i);
+        if(ghMatch){
+          // Try to match against members
+          var ghUser = ghMatch[1].toLowerCase();
+          var ghMatched = members.find(function(m){
+            return m.name.toLowerCase().replace(/\s+/g,'').includes(ghUser.substring(0,6));
+          });
+          if(ghMatched) autoName = ghMatched.name;
         }
       }
     } catch(e){}
@@ -728,23 +735,27 @@ function init(){
         members = data.members;
       }
 
-      // Spans — rebuild customSpans from sheet (all non-seed spans)
+      // Spans — merge from GAS into customSpans (don't overwrite, merge)
       if(data.spans && data.spans.length){
-        customSpans = {};
         data.spans.forEach(function(s){
           var mid = s.memberId;
+          if(!mid) return;
+          if(s.id === 'test123' || mid === 'm_test') return;
           if(!customSpans[mid]) customSpans[mid] = [];
-          // Skip the test row
-          if(s.id === 'test123' || s.memberId === 'm_test') return;
-          // Only store as custom if not already in seed (avoid duplicates on render)
+          // Skip seeded spans
           var seeded = (MEMBER_SPANS[mid]||[]).some(function(ms){
             return ms.text===s.text && ms.start===s.start;
           });
-          if(!seeded){
+          if(seeded) return;
+          // Only add if not already in customSpans
+          var exists = customSpans[mid].some(function(cs){
+            return cs.text===s.text && cs.start===s.start;
+          });
+          if(!exists){
             customSpans[mid].push({text:s.text, type:s.type||'feature', start:s.start, end:s.end||s.start});
           }
         });
-        console.log('Loaded spans from GAS:', data.spans.length);
+        console.log('Merged spans from GAS:', data.spans.length);
       }
 
       // Features
@@ -778,10 +789,24 @@ function init(){
       if(currentTab==='audit') renderAudit();
       var btn = document.getElementById('btn-gas');
       if(btn){ btn.textContent='Sheets (live)'; btn.style.color='#16a34a'; }
-      // Show sync button
       var sb = document.getElementById('btn-cal-sync');
       if(sb) sb.style.display = currentTab==='calendar' ? '' : 'none';
       showSyncStatus('Loaded from Google Sheets', true);
+
+      // Auto-detect user identity from Google account if not set
+      if(!localStorage.getItem('qa_user_identity')){
+        gasGet('whoAmI', {}).then(function(r){
+          if(r && r.name){
+            // Try to match against team members
+            var matched = members.find(function(m){
+              return m.name.toLowerCase().split(' ')[0] === r.name.toLowerCase().split(' ')[0];
+            });
+            var name = matched ? matched.name : r.name;
+            document.getElementById('user-identity').value = name;
+            localStorage.setItem('qa_user_identity', name);
+          }
+        });
+      }
     });
   } else {
     // Not connected yet — pulse the Sheets button to draw attention
