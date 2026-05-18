@@ -872,9 +872,11 @@ function init(){
         console.log('Loaded spans from GAS:', data.spans.length);
       }
 
-      // Features — reset deployed status first, then load from GAS
+      // Features — load from GAS, preserve deployed/notes/effort/comments if GAS has them
       if(data.features && data.features.length){
-        deployedFeatures = {}; // reset so GAS is source of truth
+        // Only reset deployed if GAS has features with deployed data
+        var gasHasDeployed = data.features.some(function(f){ return f.deployed === '1'; });
+        if(gasHasDeployed) deployedFeatures = {};
         data.features.forEach(function(f){
           var idx = parseInt((f.id||'').replace('feat_',''));
           if(isNaN(idx)) return;
@@ -1659,17 +1661,18 @@ function upsertFromExcel(e){
         };
 
         if(existIdx >= 0){
-          // Update existing — log each changed field
+          // UPDATE existing — only overwrite Excel-sourced fields (qa, preprod, committed, services, automation)
+          // NEVER touch: deployed, notes, comments, effort — these are tool-entered
           var f = FEATURES_DATA[existIdx];
-          ['qa','effort','preprod','committed','comments','services','automation'].forEach(function(field){
+          ['qa','preprod','committed','services','automation'].forEach(function(field){
             var oldV = f[field]||'';
             var newV = newData[field]||'';
-            if(newV && oldV !== newV){
-              logChange(summary, field, oldV, newV);
+            if(newV && newV !== oldV){
+              logChange(summary, field+' (Excel)', oldV, newV);
               f[field] = newV;
-              if(field==='effort') effortData[existIdx] = newV;
             }
           });
+          if(summary.length > (f.summary||'').length) f.summary = summary;
           updated++;
         } else {
           // Add new feature
@@ -1683,6 +1686,17 @@ function upsertFromExcel(e){
       status.textContent = '✓ '+added+' added, '+updated+' updated';
       status.style.color = '#16a34a';
       renderFeatures();
+      // Push to GAS after Excel import — preserves deployed/notes/effort/comments
+      if(GAS_URL){
+        FEATURES_DATA.forEach(function(f, i){
+          gasCall('saveFeature', {feature:{
+            id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:f.effort||'',
+            preprod:f.preprod||'', committed:f.committed||'', comments:f.comments||'',
+            services:f.services||'', automation:f.automation||'',
+            deployed:deployedFeatures[i]?'1':'', notes:bugsData[i]||''
+          }});
+        });
+      }
     }catch(err){
       status.textContent = 'Error: '+err.message;
       status.style.color = '#dc2626';
@@ -1884,17 +1898,18 @@ function upsertFromExcel(e){
         };
 
         if(existIdx >= 0){
-          // Update existing — log each changed field
+          // UPDATE existing — only overwrite Excel-sourced fields (qa, preprod, committed, services, automation)
+          // NEVER touch: deployed, notes, comments, effort — these are tool-entered
           var f = FEATURES_DATA[existIdx];
-          ['qa','effort','preprod','committed','comments','services','automation'].forEach(function(field){
+          ['qa','preprod','committed','services','automation'].forEach(function(field){
             var oldV = f[field]||'';
             var newV = newData[field]||'';
-            if(newV && oldV !== newV){
-              logChange(summary, field, oldV, newV);
+            if(newV && newV !== oldV){
+              logChange(summary, field+' (Excel)', oldV, newV);
               f[field] = newV;
-              if(field==='effort') effortData[existIdx] = newV;
             }
           });
+          if(summary.length > (f.summary||'').length) f.summary = summary;
           updated++;
         } else {
           // Add new feature
