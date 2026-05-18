@@ -288,6 +288,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
           <th style="min-width:100px;max-width:120px;">Automation</th>
           <th style="min-width:80px;">Bugs Found</th>
           <th style="min-width:100px;">Status</th>
+          <th style="width:40px;"></th>
         </tr>
       </thead>
       <tbody id="ft-body"></tbody>
@@ -1270,6 +1271,26 @@ function addFeatureRow(){
   }, 100);
 }
 
+function deleteFeatureRow(idx){
+  if(!confirm('Delete this feature row? This cannot be undone.')) return;
+  var f = FEATURES_DATA[idx]||{};
+  logChange(f.summary||'Feature '+idx, 'Row Deleted', f.summary||'', '');
+  // Remove from FEATURES_DATA
+  FEATURES_DATA.splice(idx, 1);
+  // Remove associated data
+  delete deployedFeatures[idx];
+  delete bugsData[idx];
+  delete effortData[idx];
+  delete commentsData[idx];
+  // Delete from GAS
+  if(GAS_URL){
+    gasCall('deleteFeature', {id: 'feat_'+idx});
+    gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:f.summary||'', field:'Row Deleted', oldVal:f.summary||'', newVal:''});
+  }
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
+  renderFeatures();
+}
+
 function sortFt(col){
   if(ftSortCol===col) ftSortAsc=!ftSortAsc; else { ftSortCol=col; ftSortAsc=true; }
   document.getElementById('s-preprod').textContent   = ftSortCol==='preprod'   ?(ftSortAsc?'↑':'↓'):'';
@@ -2056,6 +2077,7 @@ function renderFeatures(){
       +'<td style="font-size:12px;max-width:120px;'+bg+'" id="automation-'+origIdx+'" onclick="editAutoCell('+origIdx+',this)" title="Click to edit">'        +autoLinks(f.automation||'')+'</td>'
       +'<td style="'+bg+'">'+bugBtn+'</td>'
       +'<td style="'+bg+'">'+deployBtn+'</td>'
+      +'<td style="'+bg+';text-align:center;"><button onclick="deleteFeatureRow('+origIdx+')" title="Delete row" style="background:none;border:none;cursor:pointer;color:#d1d5db;font-size:16px;padding:4px 6px;border-radius:4px;transition:all .15s;" onmouseover="this.style.color=\'#ef4444\';this.style.background=\'#fef2f2\'" onmouseout="this.style.color=\'#d1d5db\';this.style.background=\'none\'">✕</button></td>'
       +'</tr>';
 
     // Expandable testing notes row
