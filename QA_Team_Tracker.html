@@ -679,7 +679,7 @@ function syncCalendarToGas(){
   members.forEach(function(m){
     var spans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]);
     spans.forEach(function(s){
-      allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
+      if((s.text||'').trim()) allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
     });
   });
 
@@ -718,7 +718,7 @@ function pushAllToGas(){
   members.forEach(function(m){
     var spans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]);
     spans.forEach(function(s){
-      allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
+      if((s.text||'').trim()) allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
     });
   });
 
@@ -833,25 +833,29 @@ function init(){
           var mid = s.memberId;
           if(!mid) return;
           if(s.id === 'test123' || mid === 'm_test') return;
+          // Skip spans with no text
+          var text = (s.text||'').trim();
+          if(!text) return;
           if(!customSpans[mid]) customSpans[mid] = [];
           // Skip seeded spans
           var seeded = (MEMBER_SPANS[mid]||[]).some(function(ms){
-            return ms.text===s.text && ms.start===s.start;
+            return ms.text===text && ms.start===s.start;
           });
           if(seeded) return;
           // Only add if not already in customSpans
           var exists = customSpans[mid].some(function(cs){
-            return cs.text===s.text && cs.start===s.start;
+            return cs.text===text && cs.start===s.start;
           });
           if(!exists){
-            customSpans[mid].push({text:s.text, type:s.type||'feature', start:s.start, end:s.end||s.start});
+            customSpans[mid].push({text:text, type:s.type||'feature', start:s.start, end:s.end||s.start});
           }
         });
         console.log('Merged spans from GAS:', data.spans.length);
       }
 
-      // Features
+      // Features — reset deployed status first, then load from GAS
       if(data.features && data.features.length){
+        deployedFeatures = {}; // reset so GAS is source of truth
         data.features.forEach(function(f){
           var idx = parseInt((f.id||'').replace('feat_',''));
           if(isNaN(idx)) return;
@@ -874,7 +878,8 @@ function init(){
           if(needsDateFix && GAS_URL){
             gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:fd.summary||'',qa:fd.qa||'',effort:fd.effort||'',preprod:fd.preprod||'',committed:fd.committed||'',comments:fd.comments||'',services:fd.services||'',automation:fd.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}});
           }
-          if(f.deployed === '1' || f.deployed === true) deployedFeatures[idx] = true;
+          if(f.deployed === '1' || f.deployed === true || f.deployed === 'true') deployedFeatures[idx] = true;
+          else deployedFeatures[idx] = false;
           if(f.notes) bugsData[idx] = f.notes;
           if(f.effort) effortData[idx] = f.effort;
           if(f.comments) commentsData[idx] = f.comments;
@@ -1143,8 +1148,11 @@ function saveTask(){
   customSpans[mid].push(span);
   logChange(memberName, 'Task Added', '', text+' ('+start+' to '+end+')');
   if(GAS_URL){
-    gasCall('saveSpan', {span:{id:spanId(mid,span), memberId:mid, text:text, type:type, start:start, end:end}});
-    gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:memberName, field:'Task Added', oldVal:'', newVal:text+' ('+start+' to '+end+')'});
+    // Send each field separately to avoid URL length issues with long task text
+    gasCall('saveSpan', {
+      span: JSON.stringify({id:spanId(mid,span), memberId:mid, text:text, type:type, start:start, end:end})
+    });
+    gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:memberName, field:'Task Added', oldVal:'', newVal:text.substring(0,80)+' ('+start+' to '+end+')'});
   }
   closeModal();
   saveData();
