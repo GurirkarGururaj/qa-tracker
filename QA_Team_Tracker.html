@@ -891,8 +891,10 @@ function init(){
           // Ensure array is large enough
           while(newFeaturesData.length <= idx) newFeaturesData.push(null);
 
+          // Skip rows with no summary
+          if(!f.summary || !f.summary.trim()) return;
           newFeaturesData[idx] = {
-            summary:    f.summary||'',
+            summary:    f.summary.trim(),
             qa:         f.qa||'',
             effort:     f.effort||'',
             preprod:    fmtDate(f.preprod||''),
@@ -2096,6 +2098,7 @@ function renderFeatures(){
 
   var html = '';
   sorted.forEach(function(f, si){
+    if(!f.summary || !f.summary.trim()) return; // skip blank rows
     var origIdx = FEATURES_DATA.indexOf(f);
     if(origIdx<0) origIdx = si;
     var isDeployed = !!deployedFeatures[origIdx];
@@ -2140,7 +2143,8 @@ function renderFeatures(){
     var notes = bugsData[origIdx]||'';
     if(Array.isArray(notes)) notes = notes.map(function(b){ return (b.id||'')+(b.summary?' - '+b.summary:''); }).join('\n');
     notes = String(notes);
-      +'<td colspan="10" style="padding:14px 18px;border-bottom:2px solid #fde68a;">'
+    html += '<tr id="bugs-row-'+origIdx+'" style="display:none;background:#fffdf7;">'
+      +'<td colspan="11" style="padding:14px 18px;border-bottom:2px solid #fde68a;">'
         +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
           +'<span style="font-size:12px;font-weight:700;color:#92400e;font-family:var(--mono);">📝 TESTING NOTES / ISSUES OBSERVED</span>'
           +'<span style="font-size:11px;color:#b45309;">(preprod observations, workarounds, deferred items)</span>'
