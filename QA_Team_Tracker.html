@@ -728,16 +728,23 @@ function init(){
         members = data.members;
       }
 
-      // Spans — rebuild customSpans from sheet
+      // Spans — rebuild customSpans from sheet (all non-seed spans)
       if(data.spans && data.spans.length){
         customSpans = {};
         data.spans.forEach(function(s){
           var mid = s.memberId;
           if(!customSpans[mid]) customSpans[mid] = [];
-          // Only add as custom if not already in MEMBER_SPANS seed
-          var seeded = (MEMBER_SPANS[mid]||[]).some(function(ms){ return ms.text===s.text && ms.start===s.start; });
-          if(!seeded) customSpans[mid].push({text:s.text, type:s.type, start:s.start, end:s.end});
+          // Skip the test row
+          if(s.id === 'test123' || s.memberId === 'm_test') return;
+          // Only store as custom if not already in seed (avoid duplicates on render)
+          var seeded = (MEMBER_SPANS[mid]||[]).some(function(ms){
+            return ms.text===s.text && ms.start===s.start;
+          });
+          if(!seeded){
+            customSpans[mid].push({text:s.text, type:s.type||'feature', start:s.start, end:s.end||s.start});
+          }
         });
+        console.log('Loaded spans from GAS:', data.spans.length);
       }
 
       // Features
@@ -768,9 +775,13 @@ function init(){
       // Save merged state to localStorage cache
       localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
       render();
+      if(currentTab==='audit') renderAudit();
       var btn = document.getElementById('btn-gas');
-      if(btn){ btn.textContent='🟢 Sheets'; btn.style.color='#16a34a'; }
-      showSyncStatus('✓ Synced from Google Sheets', true);
+      if(btn){ btn.textContent='Sheets (live)'; btn.style.color='#16a34a'; }
+      // Show sync button
+      var sb = document.getElementById('btn-cal-sync');
+      if(sb) sb.style.display = currentTab==='calendar' ? '' : 'none';
+      showSyncStatus('Loaded from Google Sheets', true);
     });
   } else {
     // Not connected yet — pulse the Sheets button to draw attention
@@ -893,7 +904,7 @@ function render(){
       var rRight = spanE <= viewE ? '4px' : '0';
       var bLeft  = spanS < viewS  ? 'border-left:none;' : '';
 
-      var isCustom = (customSpans[m.id]||[]).some(function(cs){ return cs===span; });
+      var isCustom = (customSpans[m.id]||[]).some(function(cs){ return cs.text===span.text && cs.start===span.start; });
       var delBtn = isCustom
         ? '<button class="chip-del" data-mid="'+m.id+'" data-start="'+escH(span.start)+'" data-text="'+escH(span.text)+'" onclick="event.stopPropagation();chipDel(this)">×</button>'
         : '';
