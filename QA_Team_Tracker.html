@@ -963,10 +963,15 @@ function saveTask(){
   if(end < start) end = start;
 
   var mid = pendingCell.memberId;
+  var memberName = (members.find(function(m){ return m.id===mid; })||{}).name || mid;
   if(!customSpans[mid]) customSpans[mid] = [];
   var span = {text:text, type:type, start:start, end:end};
   customSpans[mid].push(span);
-  if(GAS_URL) gasCall('saveSpan', {span:{id:spanId(mid,span), memberId:mid, text:text, type:type, start:start, end:end}});
+  logChange(memberName, 'Task Added', '', text+' ('+start+' to '+end+')');
+  if(GAS_URL){
+    gasCall('saveSpan', {span:{id:spanId(mid,span), memberId:mid, text:text, type:type, start:start, end:end}});
+    gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:memberName, field:'Task Added', oldVal:'', newVal:text+' ('+start+' to '+end+')'});
+  }
   closeModal();
   saveData();
   render();
@@ -977,8 +982,13 @@ function deleteSpan(memberId, start, text){
   var idx = customSpans[memberId].findIndex(function(s){ return s.start===start && s.text===text; });
   if(idx >= 0){
     var s = customSpans[memberId][idx];
+    var memberName = (members.find(function(m){ return m.id===memberId; })||{}).name || memberId;
     customSpans[memberId].splice(idx,1);
-    if(GAS_URL) gasCall('deleteSpan', {id:spanId(memberId,s)});
+    logChange(memberName, 'Task Deleted', text+' ('+start+')', '');
+    if(GAS_URL){
+      gasCall('deleteSpan', {id:spanId(memberId,s)});
+      gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:memberName, field:'Task Deleted', oldVal:text+' ('+start+')', newVal:''});
+    }
     saveData(); render();
   }
 }
