@@ -1623,25 +1623,25 @@ function upsertFromExcel(e){
   var reader = new FileReader();
   reader.onload = function(ev){
     try{
-      var wb = XLSX.read(ev.target.result, {type: file.name.endsWith('.csv')?'string':'array'});
-      var ws = wb.Sheets[wb.SheetNames[0]];
-      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-      if(rows.length < 2){ status.textContent='Empty sheet'; return; }
+      var wb = XLSX.read(ev.target.result, {type: file.name.endsWith('.csv')?'string':'array', cellDates:true});
+      var featSheetName = wb.SheetNames.find(function(n){ var nl=n.toLowerCase(); return nl.includes('feature')||nl.includes('committed')||nl.includes('wbs'); }) || wb.SheetNames[wb.SheetNames.length-1];
+      var ws = wb.Sheets[featSheetName];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
+      if(rows.length < 2){ status.textContent='Empty sheet in '+featSheetName; return; }
 
       var headers = rows[0].map(function(h){ return String(h||'').trim().toLowerCase(); });
       var col = function(name){ return headers.findIndex(function(h){ return h.includes(name); }); };
 
-      var cSum     = col('summary') >= 0 ? col('summary') : (col('feature') >= 0 ? col('feature') : 0);
-      var cQA      = col('qa resource') >= 0 ? col('qa resource') : (col('qa owner') >= 0 ? col('qa owner') : col('qa'));
+      var cSum     = col('summary') >= 0 ? col('summary') : col('feature') >= 0 ? col('feature') : 0;
+      var cQA      = col('qa resource') >= 0 ? col('qa resource') : col('qa owner') >= 0 ? col('qa owner') : col('qa');
       var cEffort  = col('effort');
       var cPreprod = col('preprod');
-      var cCommit  = col('committed');
+      var cCommit  = col('committed') >= 0 ? col('committed') : col('commit');
       var cComment = col('comment');
       var cService = col('service');
-      var cAuto    = col('automation');
+      var cAuto    = col('automation') >= 0 ? col('automation') : col('coverage');
 
-      if(cSum < 0){ status.textContent='No feature/summary column found. Headers found: '+headers.slice(0,5).join(', '); status.style.color='#dc2626'; return; }
-      status.textContent = 'Headers: col A='+headers[0]+' | Summary col='+cSum+' | QA col='+cQA;
+      if(cSum < 0){ status.textContent='No Summary column found in sheet "'+featSheetName+'". Headers: '+headers.slice(0,5).join(', '); status.style.color='#dc2626'; return; }
 
       var added=0, updated=0;
       rows.slice(1).forEach(function(row){
@@ -1878,10 +1878,11 @@ function upsertFromExcel(e){
   var reader = new FileReader();
   reader.onload = function(ev){
     try{
-      var wb = XLSX.read(ev.target.result, {type: file.name.endsWith('.csv')?'string':'array'});
-      var ws = wb.Sheets[wb.SheetNames[0]];
-      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-      if(rows.length < 2){ status.textContent='Empty sheet'; return; }
+      var wb = XLSX.read(ev.target.result, {type: file.name.endsWith('.csv')?'string':'array', cellDates:true});
+      var featSheetName = wb.SheetNames.find(function(n){ var nl=n.toLowerCase(); return nl.includes('feature')||nl.includes('committed')||nl.includes('wbs'); }) || wb.SheetNames[wb.SheetNames.length-1];
+      var ws = wb.Sheets[featSheetName];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
+      if(rows.length < 2){ status.textContent='Empty sheet in '+featSheetName; return; }
 
       var headers = rows[0].map(function(h){ return String(h||'').trim().toLowerCase(); });
       var col = function(name){ return headers.findIndex(function(h){ return h.includes(name); }); };
