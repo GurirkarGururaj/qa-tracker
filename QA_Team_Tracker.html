@@ -616,9 +616,17 @@ function syncCalendarToGas(){
   Promise.all([
     gasCall('saveMembers', {members: members}),
     gasCall('saveSpans',   {spans: allSpans})
-  ]).then(function(){
+  ]).then(function(results){
     if(btn){ btn.textContent='☁ Sync to Sheets'; btn.disabled=false; }
-    showSyncStatus('Calendar synced to Google Sheets!', true);
+    var r0 = JSON.stringify(results[0]), r1 = JSON.stringify(results[1]);
+    console.log('GAS saveMembers result:', r0);
+    console.log('GAS saveSpans result:', r1);
+    var ok = results[0] && results[1];
+    if(ok && !results[0].error && !results[1].error){
+      showSyncStatus('Synced! Members:'+r0+' Spans:'+r1, true);
+    } else {
+      showSyncStatus('Sync error: '+r0+' / '+r1, false);
+    }
   });
 }
 
@@ -645,7 +653,10 @@ function pushAllToGas(){
     };
   });
   var p3 = gasCall('saveFeatures', {features: feats});
-  return Promise.all([p1, p2, p3]);
+  return Promise.all([p1, p2, p3]).then(function(results){
+    console.log('pushAllToGas results:', JSON.stringify(results));
+    return results;
+  });
 }
 
 
