@@ -402,24 +402,10 @@ var GAS_URL = localStorage.getItem('qa_gas_url') || '';
 // Access-Control-Allow-Origin: * on its responses.
 var _gasSeq = 0;
 
-// WRITE: XMLHttpRequest POST — works because GAS allows cross-origin
-function gasCall(action, params){
-  if(!GAS_URL) return Promise.resolve(null);
-  return new Promise(function(resolve){
-    var payload = Object.assign({action: action}, params || {});
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', GAS_URL, true);
-    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-    xhr.timeout = 20000;
-    xhr.onload = function(){
-      try { resolve(JSON.parse(xhr.responseText)); } catch(e){ resolve({ok:true}); }
-    };
-    xhr.onerror = xhr.ontimeout = function(){ resolve(null); };
-    xhr.send('payload=' + encodeURIComponent(JSON.stringify(payload)));
-  });
-}
+// ALL calls use JSONP GET — the only method that reliably works cross-origin
+function gasCall(action, params){ return gasGet(action, params); }
 
-// READ: JSONP script tag (GET) — guaranteed to work from file://
+// READ: JSONP script tag (GET) — guaranteed to work cross-origin
 function gasGet(action, params){
   if(!GAS_URL) return Promise.resolve(null);
   return new Promise(function(resolve){
