@@ -38,6 +38,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
 .btn{padding:6px 14px;border-radius:5px;font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;border:none;display:inline-flex;align-items:center;gap:5px;}
 .btn-ghost{background:#fff;border:1px solid var(--border);color:var(--txt2);}
 .btn-ghost:hover{color:var(--txt);background:var(--surface2);}
+@keyframes pulse-btn{0%,100%{box-shadow:0 0 0 0 rgba(79,70,229,.4);}50%{box-shadow:0 0 0 6px rgba(79,70,229,0);}}
 .btn-primary{background:var(--teal);color:#fff;font-weight:600;}
 .btn-primary:hover{opacity:.88;}
 
@@ -181,6 +182,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
 .ft th.sortable{cursor:pointer;user-select:none;}
 .ft th.sortable:hover{background:#f9fafb;}
 .ft td{padding:10px 14px;background:#fff;border:1px solid #9ca3af;vertical-align:top;line-height:1.5;color:#1a1f2e;}
+.ft td[contenteditable]:hover{background:#f8faff !important;cursor:text;}
+.ft td[contenteditable]:focus{outline:2px solid #6366f1;outline-offset:-2px;background:#fff !important;box-shadow:inset 0 0 0 1px #a5b4fc;}
 .ft .ft .ft tr.deployed td{background:#f0fdf4 !important;}
 .ft tr.deployed .ft-summary{color:#15803d;}
 .ft tr.deployed .ft-ticket{color:#16a34a;}
@@ -216,8 +219,9 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
   <div class="topbar-right">
     <div id="user-id-wrap" style="display:flex;align-items:center;gap:6px;">
       <span style="font-size:11px;color:var(--txt2);font-family:var(--mono);">You:</span>
-      <input id="user-identity" type="text" placeholder="your email / name"
-        style="width:160px;padding:5px 9px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:var(--mono);outline:none;background:var(--surface2);color:var(--txt);"
+      <input id="user-identity" type="text" placeholder="enter your name"
+        style="width:130px;padding:5px 9px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:var(--mono);outline:none;background:var(--surface2);color:var(--txt);cursor:pointer;"
+        title="Click to change your name"
         oninput="saveIdentity()" value=""/>
     </div>
     <div id="week-nav-sep" style="width:1px;height:20px;background:var(--border);"></div>
@@ -228,6 +232,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
       <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px;" onclick="goToday()">Today</button>
     </div>
     <button class="btn btn-ghost" id="btn-members" onclick="openMemberMgr()">⚙ Members</button>
+    <button class="btn btn-ghost" id="btn-gas" onclick="openGasSettings()" title="Connect to Google Sheets" style="font-size:12px;">🔗 Sheets</button>
+    <button class="btn btn-primary" id="btn-cal-sync" onclick="syncCalendarToGas()" style="display:none;">☁ Sync to Sheets</button>
     <label id="btn-cal-upload" style="padding:6px 14px;border-radius:5px;background:#fff;border:1px solid var(--border);color:var(--txt2);font-size:12px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;" onmouseover="this.style.color='var(--txt)'" onmouseout="this.style.color='var(--txt2)'">
       📤 Import Excel
       <input type="file" id="cal-excel-upload" accept=".xlsx,.xls,.csv" style="display:none" onchange="importCalendarExcel(event)"/>
@@ -381,29 +387,319 @@ var auditLog = [];    // [{ts, feature, field, oldVal, newVal}]
 var bugsData = {};    // key: feature index → [{id, summary, severity, status}]
 var deployedFeatures = {}; // key: feature index → true/false
 var effortData = {}; // key: feature index → effort string
+var commentsData = {}; // key: feature index → comments string
 var currentTab = 'calendar';
+
+// ═══════════════════════════════════════════════════════════════════
+//  GOOGLE APPS SCRIPT BACKEND CONFIG
+//  After deploying your Apps Script, paste the Web App URL below
+// ═══════════════════════════════════════════════════════════════════
+var GAS_URL = localStorage.getItem('qa_gas_url') || '';
+
+// ── GAS communication ─────────────────────────────────────────────────────────
+// Uses JSONP for reads (GET) and XMLHttpRequest for writes.
+// XHR works from file:// to script.google.com because Apps Script sets
+// Access-Control-Allow-Origin: * on its responses.
+var _gasSeq = 0;
+
+// WRITE: XMLHttpRequest POST — works because GAS allows cross-origin
+function gasCall(action, params){
+  if(!GAS_URL) return Promise.resolve(null);
+  return new Promise(function(resolve){
+    var payload = Object.assign({action: action}, params || {});
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', GAS_URL, true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.timeout = 20000;
+    xhr.onload = function(){
+      try { resolve(JSON.parse(xhr.responseText)); } catch(e){ resolve({ok:true}); }
+    };
+    xhr.onerror = xhr.ontimeout = function(){ resolve(null); };
+    xhr.send('payload=' + encodeURIComponent(JSON.stringify(payload)));
+  });
+}
+
+// READ: JSONP script tag (GET) — guaranteed to work from file://
+function gasGet(action, params){
+  if(!GAS_URL) return Promise.resolve(null);
+  return new Promise(function(resolve){
+    var seq = ++_gasSeq;
+    var cbName = '_gasCb' + seq;
+    var scriptId = 'gas-s' + seq;
+    var qs = '?callback=' + cbName + '&action=' + encodeURIComponent(action);
+    if(params){
+      Object.keys(params).forEach(function(k){
+        var v = params[k];
+        qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(typeof v==='object'?JSON.stringify(v):String(v));
+      });
+    }
+    var timer = setTimeout(function(){
+      delete window[cbName];
+      var el = document.getElementById(scriptId);
+      if(el) el.remove();
+      resolve(null);
+    }, 15000);
+    window[cbName] = function(data){
+      clearTimeout(timer);
+      delete window[cbName];
+      var el = document.getElementById(scriptId);
+      if(el) el.remove();
+      resolve(data);
+    };
+    var script = document.createElement('script');
+    script.id = scriptId;
+    script.src = GAS_URL + qs;
+    script.onerror = function(){ clearTimeout(timer); delete window[cbName]; script.remove(); resolve(null); };
+    document.head.appendChild(script);
+  });
+}
+
+// Show config banner if GAS not set up yet
+function openGasSettings(){
+  var cur = GAS_URL || localStorage.getItem('qa_gas_url') || '';
+  var existing = document.getElementById('gas-modal');
+  if(existing){ document.getElementById('gas-modal-input').value = cur; existing.style.display='flex'; return; }
+  var modal = document.createElement('div');
+  modal.id = 'gas-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10000;display:flex;align-items:center;justify-content:center;';
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:#fff;border-radius:12px;padding:28px 32px;width:520px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3);';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:16px;font-weight:700;margin-bottom:6px;';
+  title.textContent = 'Connect to Google Sheets';
+  var desc = document.createElement('div');
+  desc.style.cssText = 'font-size:13px;color:#6b7280;margin-bottom:18px;';
+  desc.textContent = 'Paste your Apps Script Web App URL below. All edits will sync to the shared Google Sheet in real time.';
+  var inp = document.createElement('input');
+  inp.id = 'gas-modal-input';
+  inp.type = 'text';
+  inp.placeholder = 'https://script.google.com/a/macros/zwayam.net/s/.../exec';
+  inp.value = cur;
+  inp.style.cssText = 'width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:6px;font-size:12px;font-family:monospace;margin-bottom:8px;';
+  inp.addEventListener('keydown', function(e){ if(e.key==='Enter') saveGasUrl(); });
+  var statusDiv = document.createElement('div');
+  statusDiv.id = 'gas-modal-status';
+  statusDiv.style.cssText = 'font-size:12px;color:#6b7280;margin-bottom:16px;min-height:18px;';
+  var btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;';
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'padding:8px 18px;border-radius:6px;border:1.5px solid #d1d5db;background:#fff;cursor:pointer;font-size:13px;';
+  cancelBtn.onclick = function(){ modal.remove(); };
+  var connectBtn = document.createElement('button');
+  connectBtn.textContent = 'Connect & Sync';
+  connectBtn.style.cssText = 'padding:8px 20px;border-radius:6px;border:none;background:#4f46e5;color:#fff;font-weight:600;cursor:pointer;font-size:13px;';
+  connectBtn.onclick = saveGasUrl;
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(connectBtn);
+  inner.appendChild(title);
+  inner.appendChild(desc);
+  inner.appendChild(inp);
+  inner.appendChild(statusDiv);
+  inner.appendChild(btnRow);
+  modal.appendChild(inner);
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
+  setTimeout(function(){ inp.focus(); }, 50);
+}
+
+function saveGasUrl(){
+  var url = document.getElementById('gas-modal-input').value.trim();
+  var status = document.getElementById('gas-modal-status');
+  if(!url){ status.textContent = 'Please paste a URL first'; status.style.color='#dc2626'; return; }
+  if(!url.includes('script.google.com')){ status.textContent = 'That does not look like an Apps Script URL'; status.style.color='#dc2626'; return; }
+
+  GAS_URL = url;
+  localStorage.setItem('qa_gas_url', url);
+
+  // Step 1: open the URL in a new tab so Google can authenticate the session
+  status.innerHTML = 'Step 1: <b>A new tab just opened</b> — make sure you are logged in to Google in that tab, then click the button below.';
+  status.style.color = '#92400e';
+  status.style.background = '#fef3c7';
+  status.style.padding = '8px';
+  status.style.borderRadius = '4px';
+
+  var authTab = window.open(url + '?action=ping', '_blank');
+
+  // Replace Connect button with "I'm logged in — continue" button
+  var connectBtn = document.querySelector('#gas-modal button:last-child');
+  if(connectBtn){
+    connectBtn.textContent = 'I opened it — now sync!';
+    connectBtn.onclick = function(){ doGasSync(status); };
+  }
+}
+
+function doGasSync(status){
+  if(!status) status = document.getElementById('gas-modal-status');
+  status.textContent = 'Connecting…'; status.style.color='#6b7280'; status.style.background=''; status.style.padding='';
+
+  gasGet('ping', {}).then(function(data){
+    if(!data || !data.ok){
+      status.innerHTML = 'Still could not connect. <br>1. Make sure you updated Code.gs with the new version and redeployed with "New version".<br>2. The tab that opened should show JSON — if it asked you to log in, log in there first, then click the button again.';
+      status.style.color = '#dc2626';
+      var connectBtn = document.querySelector('#gas-modal button:last-child');
+      if(connectBtn){ connectBtn.textContent = 'Try again'; connectBtn.onclick = function(){ doGasSync(status); }; }
+      return;
+    }
+    status.textContent = 'Connected! Syncing all data…'; status.style.color='#16a34a';
+    var btn = document.getElementById('btn-gas');
+    if(btn){ btn.textContent='Sheets (live)'; btn.style.color='#16a34a'; }
+    // Show the calendar sync button if on calendar tab
+    var syncBtn = document.getElementById('btn-cal-sync');
+    if(syncBtn && currentTab==='calendar') syncBtn.style.display='';
+    pushAllToGas().then(function(){
+      setTimeout(function(){ var m=document.getElementById('gas-modal'); if(m) m.remove(); }, 900);
+      showSyncStatus('Connected & synced to Google Sheets!', true);
+    });
+  });
+}
+
+function showGasBanner(){
+  var existing = document.getElementById('gas-banner');
+  if(existing) return;
+  var bar = document.createElement('div');
+  bar.id = 'gas-banner';
+  bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1e3a5f;color:#fff;padding:10px 20px;display:flex;align-items:center;gap:12px;z-index:9999;font-family:monospace;font-size:13px;';
+  bar.innerHTML = '<span>⚡ <b>Google Sheets not connected.</b> Data is saved locally only. Paste your Apps Script Web App URL to enable shared saving:</span>'
+    +'<input id="gas-url-input" placeholder="https://script.google.com/macros/s/.../exec" style="flex:1;padding:6px 10px;border-radius:4px;border:none;font-size:12px;font-family:monospace;" value="'+escH(GAS_URL)+'">'
+    +'<button onclick="connectGas()" style="background:#4ade80;color:#000;border:none;padding:7px 16px;border-radius:4px;cursor:pointer;font-weight:700;">Connect</button>'
+    +'<button onclick="document.getElementById(&quot;gas-banner&quot;).remove()" style="background:none;border:1px solid #fff;color:#fff;padding:7px 12px;border-radius:4px;cursor:pointer;">Later</button>';
+  document.body.appendChild(bar);
+}
+
+function connectGas(){
+  var url = document.getElementById('gas-url-input').value.trim();
+  if(!url){ alert('Please paste the Apps Script URL first'); return; }
+  GAS_URL = url;
+  localStorage.setItem('qa_gas_url', url);
+  document.getElementById('gas-banner').remove();
+  // Push all current data to GAS immediately
+  showSyncStatus('Syncing to Google Sheets…');
+  pushAllToGas().then(function(){ showSyncStatus('✓ Connected & synced!', true); });
+}
+
+function showSyncStatus(msg, success){
+  var el = document.getElementById('sync-status');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'sync-status';
+    el.style.cssText = 'position:fixed;top:60px;right:20px;padding:8px 16px;border-radius:6px;font-size:12px;font-family:monospace;z-index:9999;transition:opacity .5s;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.background = success ? '#dcfce7' : '#fef9c3';
+  el.style.color = success ? '#166534' : '#854d0e';
+  el.style.border = success ? '1px solid #86efac' : '1px solid #fde68a';
+  el.style.opacity = '1';
+  if(success) setTimeout(function(){ el.style.opacity='0'; }, 3000);
+}
+
+function spanId(memberId, s){
+  return memberId+'__'+s.start+'__'+s.text.substring(0,30).replace(/[^a-z0-9]/gi,'_');
+}
+
+function syncCalendarToGas(){
+  if(!GAS_URL){ openGasSettings(); return; }
+  var btn = document.getElementById('btn-cal-sync');
+  if(btn){ btn.textContent='☁ Syncing…'; btn.disabled=true; }
+  showSyncStatus('Syncing calendar to Google Sheets…');
+
+  // Build full span list (seeded + custom)
+  var allSpans = [];
+  members.forEach(function(m){
+    var spans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]);
+    spans.forEach(function(s){
+      allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
+    });
+  });
+
+  Promise.all([
+    gasCall('saveMembers', {members: members}),
+    gasCall('saveSpans',   {spans: allSpans})
+  ]).then(function(){
+    if(btn){ btn.textContent='☁ Sync to Sheets'; btn.disabled=false; }
+    showSyncStatus('Calendar synced to Google Sheets!', true);
+  });
+}
+
+function pushAllToGas(){
+  // Push members
+  var p1 = gasCall('saveMembers', {members: members});
+  // Push all spans (seeded + custom)
+  var allSpans = [];
+  members.forEach(function(m){
+    var spans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]);
+    spans.forEach(function(s){
+      allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
+    });
+  });
+  var p2 = gasCall('saveSpans', {spans: allSpans});
+  // Push features
+  var feats = FEATURES_DATA.map(function(f, i){
+    return {
+      id: 'feat_'+i,
+      summary: f.summary||'', qa: f.qa||'', effort: f.effort||'',
+      preprod: f.preprod||'', committed: f.committed||'', comments: f.comments||'',
+      services: f.services||'', automation: f.automation||'',
+      deployed: deployedFeatures[i]?'1':'', notes: bugsData[i]||''
+    };
+  });
+  var p3 = gasCall('saveFeatures', {features: feats});
+  return Promise.all([p1, p2, p3]);
+}
+
 
 // ═══════════════════════ INIT ════════════════════════════════════════════════
 function init(){
+  // Always restore from localStorage first (instant, no flash)
   var saved = localStorage.getItem('qa_tracker_v3');
   if(saved){
     try{
       var s = JSON.parse(saved);
       if(s.members) members = s.members;
       if(s.customSpans) customSpans = s.customSpans;
-    if(s.deployedFeatures) deployedFeatures = s.deployedFeatures;
-    if(s.effortData){
-      effortData = s.effortData;
-      Object.keys(effortData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].effort=effortData[k]; });
-    }
-    if(s.auditLog) auditLog = s.auditLog;
-    if(s.bugsData) bugsData = s.bugsData;
+      if(s.deployedFeatures) deployedFeatures = s.deployedFeatures;
+      if(s.effortData){
+        effortData = s.effortData;
+        Object.keys(effortData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].effort=effortData[k]; });
+      }
+      if(s.commentsData){
+        commentsData = s.commentsData;
+        Object.keys(commentsData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].comments=commentsData[k]; });
+      }
+      if(s.auditLog) auditLog = s.auditLog;
+      if(s.bugsData) bugsData = s.bugsData;
     }catch(e){}
   }
   // Start at May 1 2026
-  // Restore user identity
+  // Restore user identity — auto-detect if not already saved
   var savedId = localStorage.getItem('qa_user_identity');
-  if(savedId) document.getElementById('user-identity').value = savedId;
+  if(savedId){
+    document.getElementById('user-identity').value = savedId;
+  } else {
+    // Try to auto-detect from Windows file path: C:/Users/<username>/...
+    var autoName = '';
+    try {
+      var pathMatch = window.location.href.match(/[\/\\][Uu]sers[\/\\]([^\/\\%]+)/);
+      if(pathMatch){
+        var winUser = decodeURIComponent(pathMatch[1]).toLowerCase().replace(/[.\-_]/g,' ').trim();
+        // Try to match against known members (first name or full name)
+        var matched = members.find(function(m){
+          var mn = m.name.toLowerCase();
+          return mn === winUser || mn.split(' ')[0] === winUser.split(' ')[0] || winUser.includes(mn.split(' ')[0]);
+        });
+        if(matched) autoName = matched.name;
+        else {
+          // Capitalise first letter as fallback
+          autoName = winUser.split(' ').map(function(w){ return w.charAt(0).toUpperCase()+w.slice(1); }).join(' ');
+        }
+      }
+    } catch(e){}
+    if(autoName){
+      document.getElementById('user-identity').value = autoName;
+      localStorage.setItem('qa_user_identity', autoName);
+    }
+  }
 
   var d = new Date(2026, 4, 1);
   d.setHours(0,0,0,0);
@@ -411,12 +707,76 @@ function init(){
   d.setDate(d.getDate() - (dow===0?6:dow-1));
   weekStart = d;
   render();
+
+  // Then fetch fresh data from Google Sheets (if connected)
+  if(GAS_URL){
+    showSyncStatus('🔄 Loading from Google Sheets…');
+    gasGet('loadAll', {}).then(function(data){
+      if(!data || data.error){ showSyncStatus('⚠ Could not reach Google Sheets'); return; }
+
+      // Members
+      if(data.members && data.members.length){
+        members = data.members;
+      }
+
+      // Spans — rebuild customSpans from sheet
+      if(data.spans && data.spans.length){
+        customSpans = {};
+        data.spans.forEach(function(s){
+          var mid = s.memberId;
+          if(!customSpans[mid]) customSpans[mid] = [];
+          // Only add as custom if not already in MEMBER_SPANS seed
+          var seeded = (MEMBER_SPANS[mid]||[]).some(function(ms){ return ms.text===s.text && ms.start===s.start; });
+          if(!seeded) customSpans[mid].push({text:s.text, type:s.type, start:s.start, end:s.end});
+        });
+      }
+
+      // Features
+      if(data.features && data.features.length){
+        data.features.forEach(function(f){
+          var idx = parseInt((f.id||'').replace('feat_',''));
+          if(isNaN(idx)) return;
+          // Extend FEATURES_DATA array if needed
+          while(FEATURES_DATA.length <= idx) FEATURES_DATA.push({summary:'',qa:'',effort:'',preprod:'',committed:'',comments:'',services:'',automation:''});
+          var fd = FEATURES_DATA[idx];
+          ['summary','qa','effort','preprod','committed','comments','services','automation'].forEach(function(field){
+            if(f[field] !== undefined && f[field] !== '') fd[field] = f[field];
+          });
+          if(f.deployed === '1' || f.deployed === true) deployedFeatures[idx] = true;
+          if(f.notes) bugsData[idx] = f.notes;
+          if(f.effort) effortData[idx] = f.effort;
+          if(f.comments) commentsData[idx] = f.comments;
+        });
+      }
+
+      // Audit log
+      if(data.auditLog && data.auditLog.length){
+        auditLog = data.auditLog.map(function(r){
+          return {ts: r.ts, user: r.user, feature: r.feature, field: r.field, oldVal: r.oldVal, newVal: r.newVal};
+        });
+      }
+
+      // Save merged state to localStorage cache
+      localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
+      render();
+      var btn = document.getElementById('btn-gas');
+      if(btn){ btn.textContent='🟢 Sheets'; btn.style.color='#16a34a'; }
+      showSyncStatus('✓ Synced from Google Sheets', true);
+    });
+  } else {
+    // Not connected yet — pulse the Sheets button to draw attention
+    setTimeout(function(){
+      var btn = document.getElementById('btn-gas');
+      if(btn){ btn.style.animation='pulse-btn 2s ease-in-out 3'; btn.title='Click to connect Google Sheets for shared saving'; }
+    }, 500);
+  }
 }
 
 function saveData(){
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
   var b = document.querySelector('.btn-primary[onclick="saveData()"]');
-  b.textContent = '✓ Saved'; setTimeout(()=>b.textContent='💾 Save', 1500);
+  if(b){ b.textContent = '✓ Saved'; setTimeout(()=>b.textContent='💾 Save', 1500); }
+  if(GAS_URL) pushAllToGas().then(function(){ showSyncStatus('✓ Saved to Google Sheets', true); });
 }
 
 // ═══════════════════════ DATE HELPERS ════════════════════════════════════════
@@ -595,8 +955,9 @@ function saveTask(){
 
   var mid = pendingCell.memberId;
   if(!customSpans[mid]) customSpans[mid] = [];
-  customSpans[mid].push({text, type, start, end});
-
+  var span = {text:text, type:type, start:start, end:end};
+  customSpans[mid].push(span);
+  if(GAS_URL) gasCall('saveSpan', {span:{id:spanId(mid,span), memberId:mid, text:text, type:type, start:start, end:end}});
   closeModal();
   saveData();
   render();
@@ -605,7 +966,12 @@ function saveTask(){
 function deleteSpan(memberId, start, text){
   if(!customSpans[memberId]) return;
   var idx = customSpans[memberId].findIndex(function(s){ return s.start===start && s.text===text; });
-  if(idx >= 0){ customSpans[memberId].splice(idx,1); saveData(); render(); }
+  if(idx >= 0){
+    var s = customSpans[memberId][idx];
+    customSpans[memberId].splice(idx,1);
+    if(GAS_URL) gasCall('deleteSpan', {id:spanId(memberId,s)});
+    saveData(); render();
+  }
 }
 
 document.addEventListener('keydown', function(e){
@@ -658,6 +1024,7 @@ function switchTab(tab){
   document.getElementById('btn-members').style.display = isCal?'':'none';
   document.getElementById('btn-cal-upload').style.display = isCal?'':'none';
   document.getElementById('btn-export').style.display = isCal?'':'none';
+  document.getElementById('btn-cal-sync').style.display = (isCal && GAS_URL)?'':'none';
   document.getElementById('user-id-wrap').style.display = isAudit?'none':'flex';
   document.getElementById('week-nav-sep').style.display = isCal?'':'none';
   if(isFeat) renderFeatures();
@@ -677,12 +1044,63 @@ function sortFt(col){
 function saveEffort(idx, val){
   effortData[idx] = val;
   if(FEATURES_DATA[idx]) FEATURES_DATA[idx].effort = val;
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
 }
+
+
+function onEffortBlur(idx, el){
+  var val = el.innerText.trim();
+  var old = FEATURES_DATA[idx] ? (FEATURES_DATA[idx].effort||'') : '';
+  if(val !== old){
+    logChange(FEATURES_DATA[idx]?FEATURES_DATA[idx].summary:'', 'Effort', old, val);
+    if(GAS_URL){ var f=FEATURES_DATA[idx]||{}; gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:val,preprod:f.preprod||'',committed:f.committed||'',comments:f.comments||'',services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}}); }
+  }
+  saveEffort(idx, val);
+}
+
+function saveComments(idx, val){
+  commentsData[idx] = val;
+  if(FEATURES_DATA[idx]) FEATURES_DATA[idx].comments = val;
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
+}
+
+function onCommentsBlur(idx, el){
+  var val = el.innerText.trim();
+  var old = FEATURES_DATA[idx] ? (FEATURES_DATA[idx].comments||'') : '';
+  if(val !== old){
+    logChange(FEATURES_DATA[idx]?FEATURES_DATA[idx].summary:'', 'Comments', old, val);
+    if(GAS_URL){ var f=FEATURES_DATA[idx]||{}; gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',comments:val,services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}}); }
+  }
+  saveComments(idx, val);
+}
+// Generic handler for all other editable fields (summary, qa, preprod, committed, services, automation)
+function onFieldBlur(idx, field, el){
+  var val = el.innerText.trim();
+  if(!FEATURES_DATA[idx]) return;
+  var old = FEATURES_DATA[idx][field] || '';
+  if(val === old) return;
+  logChange(FEATURES_DATA[idx].summary, field, old, val);
+  FEATURES_DATA[idx][field] = val;
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
+  if(field === 'summary') renderFeatures();
+  // Push to GAS
+  if(GAS_URL){
+    var f = FEATURES_DATA[idx];
+    gasCall('saveFeature', {feature:{
+      id:'feat_'+idx, summary:f.summary||'', qa:f.qa||'', effort:f.effort||'',
+      preprod:f.preprod||'', committed:f.committed||'', comments:f.comments||'',
+      services:f.services||'', automation:f.automation||'',
+      deployed:deployedFeatures[idx]?'1':'', notes:bugsData[idx]||''
+    }});
+    gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:FEATURES_DATA[idx].summary, field:field, oldVal:old, newVal:val});
+  }
+}
+
 
 function toggleDeploy(idx){
   deployedFeatures[idx] = !deployedFeatures[idx];
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
+  if(GAS_URL){ var f=FEATURES_DATA[idx]||{}; gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',comments:f.comments||'',services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}}); }
   renderFeatures();
 }
 
@@ -707,7 +1125,7 @@ function logChange(featureSummary, field, oldVal, newVal){
   };
   auditLog.unshift(entry);
   if(auditLog.length > 500) auditLog.length = 500;
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
 }
 
 function renderAudit(){
@@ -729,7 +1147,7 @@ function renderAudit(){
 
 function clearAudit(){
   auditLog = [];
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
   renderAudit();
 }
 
@@ -911,6 +1329,9 @@ function importCalendarExcel(e){
       showStatus('✓ ' + msg, '#16a34a');
       console.log('Calendar import:', msg);
 
+      // Auto-push new spans to Google Sheets if connected
+      if(GAS_URL && added > 0) syncCalendarToGas();
+
     }catch(err){
       console.error('Import error:', err);
       showStatus('❌ Error: ' + err.message, '#dc2626');
@@ -1001,7 +1422,7 @@ function upsertFromExcel(e){
         }
       });
 
-      localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+      localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
       status.textContent = '✓ '+added+' added, '+updated+' updated';
       status.style.color = '#16a34a';
       renderFeatures();
@@ -1037,7 +1458,7 @@ function saveBugNotes(idx, val){
   bugsData[idx] = val;
   var feat = FEATURES_DATA[idx];
   logChange(feat?feat.summary:'Feature '+idx, 'Testing Notes', old?'(had notes)':'(empty)', val?'(updated)':'(cleared)');
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
   // Update button indicator without full re-render
   var btn = document.getElementById('bugs-btn-'+idx);
   if(btn){
@@ -1059,12 +1480,40 @@ function sortFt(col){
 function saveEffort(idx, val){
   effortData[idx] = val;
   if(FEATURES_DATA[idx]) FEATURES_DATA[idx].effort = val;
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
+}
+
+
+function onEffortBlur(idx, el){
+  var val = el.innerText.trim();
+  var old = FEATURES_DATA[idx] ? (FEATURES_DATA[idx].effort||'') : '';
+  if(val !== old){
+    logChange(FEATURES_DATA[idx]?FEATURES_DATA[idx].summary:'', 'Effort', old, val);
+    if(GAS_URL){ var f=FEATURES_DATA[idx]||{}; gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:val,preprod:f.preprod||'',committed:f.committed||'',comments:f.comments||'',services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}}); }
+  }
+  saveEffort(idx, val);
+}
+
+function saveComments(idx, val){
+  commentsData[idx] = val;
+  if(FEATURES_DATA[idx]) FEATURES_DATA[idx].comments = val;
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
+}
+
+function onCommentsBlur(idx, el){
+  var val = el.innerText.trim();
+  var old = FEATURES_DATA[idx] ? (FEATURES_DATA[idx].comments||'') : '';
+  if(val !== old){
+    logChange(FEATURES_DATA[idx]?FEATURES_DATA[idx].summary:'', 'Comments', old, val);
+    if(GAS_URL){ var f=FEATURES_DATA[idx]||{}; gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',comments:val,services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}}); }
+  }
+  saveComments(idx, val);
 }
 
 function toggleDeploy(idx){
   deployedFeatures[idx] = !deployedFeatures[idx];
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
+  if(GAS_URL){ var f=FEATURES_DATA[idx]||{}; gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',comments:f.comments||'',services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}}); }
   renderFeatures();
 }
 
@@ -1089,7 +1538,7 @@ function logChange(featureSummary, field, oldVal, newVal){
   };
   auditLog.unshift(entry);
   if(auditLog.length > 500) auditLog.length = 500;
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
 }
 
 function renderAudit(){
@@ -1111,84 +1560,11 @@ function renderAudit(){
 
 function clearAudit(){
   auditLog = [];
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
   renderAudit();
 }
 
 // ═══════════════ EXCEL UPSERT ════════════════════════════════════════════════
-function importCalendarExcel(e){
-  var file = e.target.files[0];
-  if(!file) return;
-  var reader = new FileReader();
-  reader.onload = function(ev){
-    try{
-      var wb = XLSX.read(ev.target.result, {type: file.name.endsWith('.csv')?'string':'array'});
-      // Try MAY sheet first, fallback to first sheet
-      var sheetName = wb.SheetNames.includes('MAY') ? 'MAY' : wb.SheetNames[0];
-      var ws = wb.Sheets[sheetName];
-      var raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-      if(raw.length < 2){ alert('Sheet appears empty'); return; }
-
-      // Build date map from header row
-      var dateRow = raw[0];
-      var dateMap = {};
-      dateRow.forEach(function(cell, i){
-        if(cell instanceof Date) dateMap[i] = cell.toISOString().substring(0,10);
-        else if(cell && String(cell).match(/[0-9]{4}-[0-9]{2}-[0-9]{2}/)) dateMap[i] = String(cell).substring(0,10);
-      });
-
-      var added = 0;
-      raw.slice(1).forEach(function(row){
-        var name = String(row[0]||'').trim();
-        if(!name) return;
-        var mid = 'm_'+name.toLowerCase().replace(/\s+/g,'_');
-        // Ensure member exists
-        if(!members.find(function(m){ return m.id===mid; })){
-          members.push({id:mid,name:name,color:'#64748b'});
-        }
-        if(!customSpans[mid]) customSpans[mid] = [];
-
-        // Build spans from consecutive same-value cells
-        var prev = {text:'',start:'',end:''};
-        Object.keys(dateMap).forEach(function(ci){
-          var ds = dateMap[ci];
-          var val = String(row[ci]||'').trim();
-          if(!val || val==='None') return;
-          if(val===prev.text && prev.end){
-            // Extend span
-            prev.end = ds;
-          } else {
-            if(prev.text && prev.start){
-              // Save previous span to customSpans
-              var tl = prev.text.toLowerCase();
-              var t = tl.includes('leave')?'leave':tl.includes('automat')||tl.includes('zauto')?'automation':tl.includes('zhire')||tl.includes('zbugs')||tl.includes('zcf')?'bug':'feature';
-              customSpans[mid].push({text:prev.text,type:t,start:prev.start,end:prev.end});
-              added++;
-            }
-            prev = {text:val, start:ds, end:ds};
-          }
-        });
-        if(prev.text && prev.start){
-          var tl = prev.text.toLowerCase();
-          var t = tl.includes('leave')?'leave':tl.includes('automat')||tl.includes('zauto')?'automation':tl.includes('zhire')||tl.includes('zbugs')||tl.includes('zcf')?'bug':'feature';
-          customSpans[mid].push({text:prev.text,type:t,start:prev.start,end:prev.end});
-          added++;
-        }
-      });
-
-      logChange('Calendar', 'Excel Import', '—', added+' spans imported from '+sheetName);
-      saveData();
-      render();
-      alert('✓ Imported '+added+' task spans from sheet "'+sheetName+'"');
-    }catch(err){
-      alert('Import error: '+err.message);
-    }
-  };
-  if(file.name.endsWith('.csv')) reader.readAsText(file);
-  else reader.readAsArrayBuffer(file);
-  e.target.value='';
-}
-
 function upsertFromExcel(e){
   var file = e.target.files[0];
   if(!file) return;
@@ -1267,7 +1643,7 @@ function upsertFromExcel(e){
         }
       });
 
-      localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+      localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
       status.textContent = '✓ '+added+' added, '+updated+' updated';
       status.style.color = '#16a34a';
       renderFeatures();
@@ -1305,7 +1681,7 @@ function addBug(idx){
   bugsData[idx].push(newBug);
   var feat = FEATURES_DATA[idx];
   logChange(feat?feat.summary:'Feature '+idx, 'Bug Added', '—', (bugId?bugId+': ':'')+bugSum);
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
   renderFeatures();
   setTimeout(function(){ toggleBugs(idx); }, 50);
 }
@@ -1316,7 +1692,7 @@ function deleteBug(featIdx, bugIdx){
   var feat = FEATURES_DATA[featIdx];
   logChange(feat?feat.summary:'Feature '+featIdx, 'Bug Removed', (bug.id?bug.id+': ':'')+bug.summary, '—');
   bugsData[featIdx].splice(bugIdx, 1);
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
   renderFeatures();
 }
 
@@ -1328,7 +1704,7 @@ function toggleBugStatus(featIdx, bugIdx){
   bug.status = cycle[(cycle.indexOf(oldSt)+1)%cycle.length];
   var feat = FEATURES_DATA[featIdx];
   logChange(feat?feat.summary:'Feature '+featIdx, 'Bug Status: '+(bug.id||bug.summary.substring(0,20)), oldSt, bug.status);
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
   renderFeatures();
   setTimeout(function(){ toggleBugs(featIdx); }, 50);
 }
@@ -1398,18 +1774,19 @@ function renderFeatures(){
       +'style="padding:4px 11px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid '+bugBtnColor+';background:'+bugBtnBg+';color:'+bugBtnColor+';font-family:var(--mono);">'
       +'▸ Notes'+(hasNotes?' ✎':'')+'</button>';
 
-    // Main feature row
+    // Main feature row — all cells editable
+    var bg = isDeployed?'background:#f0fdf4;':'';
     html += '<tr style="'+rowBg+'">'
-      +'<td style="min-width:280px;'+(isDeployed?'background:#f0fdf4;':'')+'">'+ticketHtml+'<div class="ft-summary">'+escH((title||f.summary).substring(0,100))+'</div></td>'
-      +'<td style="font-size:13px;'+(isDeployed?'background:#f0fdf4;':'')+'">'+linkifyTickets(escH(f.qa||'—'))+'</td>'
-      +'<td contenteditable="true" style="font-size:13px;'+(isDeployed?'background:#f0fdf4;':'')+'" onblur="onEffortBlur('+origIdx+',this)" id="effort-'+origIdx+'">'+escH(f.effort||'')+'</td>'
-      +'<td style="'+(isDeployed?'background:#f0fdf4;':'')+'"><span style="font-size:13px;">'+escH(f.preprod||'—')+'</span></td>'
-      +'<td style="'+(isDeployed?'background:#f0fdf4;':'')+'"><span style="font-size:13px;">'+escH(f.committed||'—')+'</span></td>'
-      +'<td style="font-size:13px;color:#374151;'+(isDeployed?'background:#f0fdf4;':'')+'">'+escH((f.comments||'').substring(0,80))+'</td>'
-      +'<td style="font-size:12px;color:#374151;'+(isDeployed?'background:#f0fdf4;':'')+'">'+escH((f.services||'—').substring(0,40))+'</td>'
-      +'<td style="'+(isDeployed?'background:#f0fdf4;':'')+'">'+autoLinks(f.automation||'')+'</td>'
-      +'<td style="'+(isDeployed?'background:#f0fdf4;':'')+'">'+bugBtn+'</td>'
-      +'<td style="'+(isDeployed?'background:#f0fdf4;':'')+'">'+deployBtn+'</td>'
+      +'<td contenteditable="true" style="min-width:280px;font-size:13px;font-weight:500;'+bg+'" onblur="onFieldBlur('+origIdx+',\'summary\',this)" id="summary-'+origIdx+'">'+escH(f.summary||'')+'</td>'
+      +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'qa\',this)" id="qa-'+origIdx+'">'+escH(f.qa||'')+'</td>'
+      +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onEffortBlur('+origIdx+',this)" id="effort-'+origIdx+'">'+escH(f.effort||'')+'</td>'
+      +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'preprod\',this)" id="preprod-'+origIdx+'">'+escH(f.preprod||'')+'</td>'
+      +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'committed\',this)" id="committed-'+origIdx+'">'+escH(f.committed||'')+'</td>'
+      +'<td contenteditable="true" style="font-size:13px;color:#374151;min-width:160px;white-space:pre-wrap;'+bg+'" onblur="onCommentsBlur('+origIdx+',this)" id="comments-'+origIdx+'">'+escH(f.comments||'')+'</td>'
+      +'<td contenteditable="true" style="font-size:12px;color:#374151;'+bg+'" onblur="onFieldBlur('+origIdx+',\'services\',this)" id="services-'+origIdx+'">'+escH(f.services||'')+'</td>'
+      +'<td contenteditable="true" style="font-size:12px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'automation\',this)" id="automation-'+origIdx+'">'+escH(f.automation||'')+'</td>'
+      +'<td style="'+bg+'">'+bugBtn+'</td>'
+      +'<td style="'+bg+'">'+deployBtn+'</td>'
       +'</tr>';
 
     // Expandable testing notes row
