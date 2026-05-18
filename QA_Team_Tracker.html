@@ -284,7 +284,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
           <th class="sortable" style="min-width:110px;" onclick="sortFt('committed')">Committed Prod <span id="s-committed" style="color:var(--teal)">↑</span></th>
           <th style="min-width:150px;">Comments</th>
           <th style="min-width:80px;">Services</th>
-          <th style="min-width:120px;">Automation</th>
+          <th style="min-width:100px;max-width:120px;">Automation</th>
           <th style="min-width:80px;">Bugs Found</th>
           <th style="min-width:100px;">Status</th>
         </tr>
@@ -1919,6 +1919,29 @@ function linkifyTickets(text){
   });
 }
 
+function editAutoCell(idx, td){
+  // If already editing, skip
+  if(td.querySelector('input')) return;
+  var current = (FEATURES_DATA[idx]||{}).automation || '';
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.value = current;
+  input.style.cssText = 'width:100%;padding:3px 5px;font-size:12px;border:1.5px solid #6366f1;border-radius:3px;outline:none;font-family:var(--mono);';
+  td.innerHTML = '';
+  td.appendChild(input);
+  input.focus();
+  input.select();
+  function save(){
+    onFieldBlur(idx, 'automation', {innerText: input.value.trim()});
+    td.innerHTML = autoLinks(input.value.trim() || '—');
+  }
+  input.onblur = save;
+  input.onkeydown = function(e){
+    if(e.key==='Enter'){ input.blur(); }
+    if(e.key==='Escape'){ td.innerHTML = autoLinks(current||'—'); }
+  };
+}
+
 function autoLinks(text){
   if(!text||text.trim()===''||text==='—') return '<span style="color:#9ca3af;">—</span>';
   var ids=[], re=/Z[A-Z]+-\d+/g, m;
@@ -1987,7 +2010,7 @@ function renderFeatures(){
       +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'committed\',this)" id="committed-'+origIdx+'">'+escH(fmtDate(f.committed||''))+'</td>'
       +'<td contenteditable="true" style="font-size:13px;color:#374151;min-width:160px;white-space:pre-wrap;'+bg+'" onblur="onCommentsBlur('+origIdx+',this)" id="comments-'+origIdx+'">'+escH(f.comments||'')+'</td>'
       +'<td contenteditable="true" style="font-size:12px;color:#374151;'+bg+'" onblur="onFieldBlur('+origIdx+',\'services\',this)" id="services-'+origIdx+'">'+escH(f.services||'')+'</td>'
-      +'<td contenteditable="true" style="font-size:12px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'automation\',this)" id="automation-'+origIdx+'">'+escH(f.automation||'')+'</td>'
+      +'<td style="font-size:12px;max-width:120px;'+bg+'" id="automation-'+origIdx+'" onclick="editAutoCell('+origIdx+',this)" title="Click to edit">'        +autoLinks(f.automation||'')+'</td>'
       +'<td style="'+bg+'">'+bugBtn+'</td>'
       +'<td style="'+bg+'">'+deployBtn+'</td>'
       +'</tr>';
