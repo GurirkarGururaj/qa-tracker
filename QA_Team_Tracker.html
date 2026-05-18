@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>QA Team Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#ffffff;--surface:#fff;--surface2:#f5f7fa;--surface3:#eef0f4;
+  --border:#e2e6ed;--border2:#d0d5de;
+  --txt:#1a1f2e;--txt2:#5a6282;--txt3:#9ba3be;
+  --blue:#2563eb;--blue-bg:#eff4ff;--blue-chip:#dbeafe;
+  --red:#dc2626;--red-bg:#fff0f0;--red-chip:#fee2e2;
+  --amber:#d97706;--amber-bg:#fffbeb;--amber-chip:#fef3c7;
+  --green:#16a34a;--green-bg:#f0fdf4;--green-chip:#dcfce7;
+  --teal:#0891b2;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans',sans-serif;
+  --col-w:110px; --name-w:110px; --row-gap:4px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14px;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+
+/* ── TOPBAR ── */
+.topbar{height:50px;background:#ffffff;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:20px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.logo{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--teal);letter-spacing:.05em;white-space:nowrap;}
+.logo span{color:var(--txt3);}
+.main-tabs{display:flex;gap:2px;}
+.main-tab{padding:7px 18px;border:none;background:transparent;color:var(--txt2);font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;border-radius:6px;transition:all .15s;}
+.main-tab:hover{background:var(--surface2);color:var(--txt);}
+.main-tab.active{background:var(--surface2);color:var(--txt);font-weight:600;box-shadow:inset 0 -2px 0 var(--teal);}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.week-nav{display:flex;align-items:center;gap:6px;}
+.week-btn{background:var(--surface2);border:1px solid var(--border);color:var(--txt2);width:28px;height:28px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .15s;}
+.week-btn:hover{border-color:var(--teal);color:var(--teal);}
+.week-label{font-family:var(--mono);font-size:13px;color:var(--txt);min-width:180px;text-align:center;padding:0 6px;}
+.btn{padding:6px 14px;border-radius:5px;font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;border:none;display:inline-flex;align-items:center;gap:5px;}
+.btn-ghost{background:#fff;border:1px solid var(--border);color:var(--txt2);}
+.btn-ghost:hover{color:var(--txt);background:var(--surface2);}
+.btn-primary{background:var(--teal);color:#fff;font-weight:600;}
+.btn-primary:hover{opacity:.88;}
+
+/* ── LEGEND ── */
+.legend-bar{height:34px;background:#fafbfc;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px;flex-shrink:0;}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--txt2);}
+.legend-dot{width:10px;height:10px;border-radius:2px;}
+
+/* ── CALENDAR SCROLL AREA ── */
+.cal-outer{background:#ffffff;}
+
+/* ── CALENDAR TABLE ── */
+.cal-table{border-collapse:collapse;table-layout:fixed;}
+.cal-table tr{background:#ffffff;}
+.cal-table th, .cal-table td{padding:0;margin:0;}
+
+/* ── CORNER & HEADER ── */
+.th-corner{
+  position:sticky;left:0;top:0;z-index:30;
+  width:var(--name-w);min-width:var(--name-w);
+  background:#f0f2f5;border-right:2px solid var(--border2);border-bottom:2px solid var(--border2);
+  padding:0 12px;height:44px;
+  font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt3);
+}
+.th-date{
+  position:sticky;top:0;z-index:20;
+  width:var(--col-w);min-width:var(--col-w);
+  background:#f0f2f5;border-right:1px solid var(--border);border-bottom:2px solid var(--border2);
+  text-align:center;height:44px;vertical-align:middle;
+}
+.th-date.weekend{background:#fef3c7;opacity:1;}
+.th-date.today{background:#e0f7ff;border-bottom:2px solid var(--teal);}
+.th-day{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);}
+.th-num{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--txt2);}
+.th-date.today .th-num{color:var(--teal);}
+
+/* ── MEMBER ROW ── */
+.td-name{
+  position:sticky;left:0;z-index:10;
+  background:#ffffff;border-right:2px solid var(--border2);border-bottom:1px solid var(--border);
+  width:var(--name-w);min-width:var(--name-w);
+  padding:0 10px;vertical-align:middle;
+}
+.member-inner{display:flex;align-items:center;gap:8px;}
+.member-av{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;font-family:var(--mono);flex-shrink:0;}
+.member-nm{font-size:13px;font-weight:500;white-space:nowrap;color:var(--txt);}
+
+/* ── DAY CELL ── */
+.td-day{
+  border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+  width:var(--col-w);min-width:var(--col-w);
+  vertical-align:top;position:relative;
+  padding:3px;cursor:pointer;
+  background:#ffffff !important;
+}
+.td-day:not(.weekend):hover{background:#f0f4ff;}
+.td-day.weekend{background:#fffbf0 !important;cursor:default;}
+.td-day.weekend:hover{background:#fff7e0;}
+.td-day.today{background:#f0fbff;}
+
+/* ── SPANNING CHIP ── */
+.span-chip{
+  display:block;
+  border-radius:4px;
+  padding:4px 10px;
+  font-size:12.5px;
+  font-weight:500;
+  line-height:1.4;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  cursor:pointer;
+  position:absolute;
+  border-left:3px solid transparent;
+  box-shadow:0 1px 3px rgba(0,0,0,.1);
+  transition:opacity .15s;
+  z-index:5;
+  opacity:1;
+}
+.span-chip:hover{opacity:.85;z-index:5;}
+.span-chip.type-feature{background:#dbeafe;color:#1d4ed8;border-left-color:#2563eb;}
+.span-chip.type-bug{background:#fee2e2;color:#b91c1c;border-left-color:#dc2626;}
+.span-chip.type-leave{background:#fef3c7;color:#92400e;border-left-color:#d97706;}
+.span-chip.type-automation{background:#dcfce7;color:#15803d;border-left-color:#16a34a;}
+
+/* ── Chip continues left (mid-span, hide left border) ── */
+.span-chip.cont-left{border-left-color:transparent;border-radius:0 4px 4px 0;margin-left:0;}
+/* ── Chip continues right (not end of span) ── */
+.span-chip.cont-right{border-radius:4px 0 0 4px;margin-right:0;}
+/* ── Chip continues both directions ── */
+.span-chip.cont-both{border-left-color:transparent;border-radius:0;margin-left:0;margin-right:0;}
+
+/* ── DELETE BUTTON on chip ── */
+.chip-del{position:absolute;top:2px;right:3px;background:none;border:none;cursor:pointer;font-size:11px;padding:0;line-height:1;opacity:0;color:inherit;}
+.span-chip:hover .chip-del{opacity:.5;}
+.chip-del:hover{opacity:1!important;}
+
+/* ── ADD HINT ── */
+.add-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--border2);opacity:0;pointer-events:none;}
+.td-day:not(.weekend):hover .add-hint{opacity:1;}
+
+/* ── MODAL ── */
+.overlay{position:fixed;inset:0;background:rgba(30,40,60,.35);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s;backdrop-filter:blur(2px);}
+.overlay.open{opacity:1;pointer-events:all;}
+.modal{background:#fff;border:1px solid var(--border);border-radius:10px;width:400px;padding:22px;transform:translateY(8px);transition:transform .2s;box-shadow:0 8px 40px rgba(0,0,0,.15);}
+.overlay.open .modal{transform:translateY(0);}
+.modal-title{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--teal);margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;}
+.modal-close{background:none;border:none;color:var(--txt3);cursor:pointer;font-size:18px;line-height:1;padding:0;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:10px;font-family:var(--mono);color:var(--txt2);letter-spacing:.07em;text-transform:uppercase;margin-bottom:5px;}
+.field input,.field select{width:100%;background:var(--surface2);border:1.5px solid var(--border);color:var(--txt);padding:8px 10px;border-radius:6px;font-family:var(--sans);font-size:13px;outline:none;transition:border-color .15s;}
+.field input:focus,.field select:focus{border-color:var(--teal);}
+.type-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.type-opt{padding:8px;border-radius:5px;border:1.5px solid var(--border);cursor:pointer;text-align:center;font-size:11.5px;font-family:var(--mono);transition:all .15s;color:var(--txt2);background:var(--surface2);}
+.type-opt.sel{border-color:currentColor;font-weight:600;}
+.type-opt[data-t=feature].sel{color:var(--blue);background:var(--blue-chip);}
+.type-opt[data-t=bug].sel{color:var(--red);background:var(--red-chip);}
+.type-opt[data-t=leave].sel{color:var(--amber);background:var(--amber-chip);}
+.type-opt[data-t=automation].sel{color:var(--green);background:var(--green-chip);}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+
+/* ── MEMBER MGR ── */
+.member-mgr{background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;}
+.mem-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);}
+.mem-row:last-child{border-bottom:none;}
+.mem-row input{width:110px;flex-shrink:0;background:#fff;border:1.5px solid var(--border);color:var(--txt);padding:5px 8px;border-radius:4px;font-size:12px;outline:none;}
+.mem-row input:focus{border-color:var(--teal);}
+.swatches{display:grid;grid-template-columns:repeat(5,20px);gap:3px;}
+.swatch{width:20px;height:20px;border-radius:3px;cursor:pointer;border:2px solid transparent;}
+.swatch.sel{border-color:#111;box-shadow:0 0 0 1px #111;}
+.del-btn{background:none;border:none;color:var(--txt3);cursor:pointer;font-size:15px;padding:0 3px;}
+.del-btn:hover{color:var(--red);}
+.add-mem-btn{background:none;border:1.5px dashed var(--border2);color:var(--txt3);width:100%;padding:7px;border-radius:6px;cursor:pointer;font-size:11px;font-family:var(--mono);margin-top:6px;transition:all .15s;}
+.add-mem-btn:hover{border-color:var(--teal);color:var(--teal);}
+
+/* ── FEATURES TABLE ── */
+#features-view{position:absolute;inset:0;overflow:auto;background:#fff;display:none;}
+.ft-wrap{padding:16px 0 16px 0;}
+.ft{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:auto;}
+.ft th{padding:12px 14px;font-family:var(--sans);font-size:13px;font-weight:700;letter-spacing:.01em;color:#111827;background:#f1f5f9;border:1px solid #9ca3af;text-align:left;position:sticky;top:0;border-bottom:2px solid #6b7280;}
+.ft th.sortable{cursor:pointer;user-select:none;}
+.ft th.sortable:hover{background:#f9fafb;}
+.ft td{padding:10px 14px;background:#fff;border:1px solid #9ca3af;vertical-align:top;line-height:1.5;color:#1a1f2e;}
+.ft .ft .ft tr.deployed td{background:#f0fdf4 !important;}
+.ft tr.deployed .ft-summary{color:#15803d;}
+.ft tr.deployed .ft-ticket{color:#16a34a;}
+.deploy-btn{padding:4px 11px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid #d1d5db;background:#f9fafb;color:#6b7280;font-family:var(--mono);transition:all .15s;white-space:nowrap;}
+.deploy-btn:hover{border-color:#16a34a;color:#16a34a;background:#f0fdf4;}
+.deploy-btn.deployed{background:#dcfce7;color:#15803d;border-color:#86efac;}
+.ft tr:hover td{background:#f0f4ff;}
+.ft-ticket{font-family:var(--mono);font-size:10px;color:var(--teal);margin-bottom:2px;}
+.ft-summary{font-size:13px;font-weight:500;color:#111827;line-height:1.4;}
+.date-chip{display:inline-block;padding:3px 8px;border-radius:3px;font-family:var(--mono);font-size:12px;font-weight:600;white-space:nowrap;}
+.date-chip.past{background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;}
+.date-chip.future{background:#eff4ff;color:#2563eb;border:1px solid #bfdbfe;}
+.date-chip.soon{background:#fffbeb;color:#d97706;border:1px solid #fcd34d;}
+.date-chip.empty{background:#f9fafb;color:#9ca3af;border:1px solid #e5e7eb;}
+
+/* scrollbar */
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:var(--surface2);}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">QA <span>/</span> TEAM TRACKER</div>
+  <div class="main-tabs">
+    <button class="main-tab active" id="tab-calendar" onclick="switchTab('calendar')">📅 Calendar</button>
+    <button class="main-tab" id="tab-features" onclick="switchTab('features')">📋 Features &amp; Dates</button>
+    <button class="main-tab" id="tab-audit" onclick="switchTab('audit')">📝 Audit Log</button>
+  </div>
+  <div class="topbar-right">
+    <div id="user-id-wrap" style="display:flex;align-items:center;gap:6px;">
+      <span style="font-size:11px;color:var(--txt2);font-family:var(--mono);">You:</span>
+      <input id="user-identity" type="text" placeholder="your email / name"
+        style="width:160px;padding:5px 9px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:var(--mono);outline:none;background:var(--surface2);color:var(--txt);"
+        oninput="saveIdentity()" value=""/>
+    </div>
+    <div id="week-nav-sep" style="width:1px;height:20px;background:var(--border);"></div>
+    <div class="week-nav" id="week-nav">
+      <button class="week-btn" onclick="shiftWeek(-1)">‹</button>
+      <div class="week-label" id="week-label"></div>
+      <button class="week-btn" onclick="shiftWeek(1)">›</button>
+      <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px;" onclick="goToday()">Today</button>
+    </div>
+    <button class="btn btn-ghost" id="btn-members" onclick="openMemberMgr()">⚙ Members</button>
+    <label id="btn-cal-upload" style="padding:6px 14px;border-radius:5px;background:#fff;border:1px solid var(--border);color:var(--txt2);font-size:12px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;" onmouseover="this.style.color='var(--txt)'" onmouseout="this.style.color='var(--txt2)'">
+      📤 Import Excel
+      <input type="file" id="cal-excel-upload" accept=".xlsx,.xls,.csv" style="display:none" onchange="importCalendarExcel(event)"/>
+    </label>
+    <button class="btn btn-ghost" id="btn-export" onclick="exportCSV()">↓ Export</button>
+    <button class="btn btn-primary" onclick="saveData()">💾 Save</button>
+  </div>
+</div>
+
+<!-- LEGEND -->
+<div class="legend-bar" id="legend-bar">
+  <span style="font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.08em;text-transform:uppercase;margin-right:4px;">TYPE:</span>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>Feature / Story</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Bug Fix</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>Leave</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Automation</div>
+</div>
+
+<!-- IMPORT STATUS BAR -->
+<div id="import-status-bar" style="display:none;padding:8px 20px;font-size:12.5px;font-family:var(--mono);border-bottom:1px solid var(--border);align-items:center;justify-content:space-between;gap:10px;">
+  <span id="import-status-text"></span>
+  <button onclick="document.getElementById('import-status-bar').style.display='none'" style="background:none;border:none;cursor:pointer;color:var(--txt3);font-size:16px;line-height:1;padding:0 4px;">×</button>
+</div>
+
+<!-- MAIN CONTENT WRAPPER -->
+<div id="main-content" style="flex:1;min-height:0;overflow:hidden;position:relative;">
+
+<!-- CALENDAR VIEW -->
+<div class="cal-outer" id="cal-outer" style="position:absolute;inset:0;overflow:auto;">
+  <table class="cal-table" id="cal-table">
+    <thead id="cal-head"></thead>
+    <tbody id="cal-body"></tbody>
+  </table>
+</div>
+
+<!-- FEATURES VIEW -->
+<div id="features-view">
+
+  <div class="ft-wrap">
+    <table class="ft">
+      <thead>
+        <tr>
+          <th style="min-width:280px;">Feature / Ticket</th>
+          <th style="min-width:90px;">QA Owner</th>
+          <th style="min-width:110px;">QA Effort Est.</th>
+          <th class="sortable" style="min-width:100px;" onclick="sortFt('preprod')">Preprod Date <span id="s-preprod"></span></th>
+          <th class="sortable" style="min-width:110px;" onclick="sortFt('committed')">Committed Prod <span id="s-committed" style="color:var(--teal)">↑</span></th>
+          <th style="min-width:150px;">Comments</th>
+          <th style="min-width:80px;">Services</th>
+          <th style="min-width:120px;">Automation</th>
+          <th style="min-width:80px;">Bugs Found</th>
+          <th style="min-width:100px;">Status</th>
+        </tr>
+      </thead>
+      <tbody id="ft-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- AUDIT LOG VIEW -->
+<div id="audit-view" style="position:absolute;inset:0;overflow:auto;background:#fff;display:none;">
+  <div style="padding:16px 20px;background:#f8fafc;border-bottom:1px solid #e2e6ed;display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-family:var(--mono);font-size:13px;font-weight:600;color:#374151;">📝 Change Audit Log</span>
+    <button class="btn btn-ghost" onclick="clearAudit()" style="font-size:12px;">Clear Log</button>
+  </div>
+  <div style="padding:16px 20px;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#f1f5f9;">
+          <th style="padding:10px 12px;border:1px solid #9ca3af;text-align:left;font-weight:700;min-width:150px;">Timestamp</th>
+          <th style="padding:10px 12px;border:1px solid #9ca3af;text-align:left;font-weight:700;min-width:130px;">User</th>
+          <th style="padding:10px 12px;border:1px solid #9ca3af;text-align:left;font-weight:700;min-width:200px;">Feature</th>
+          <th style="padding:10px 12px;border:1px solid #9ca3af;text-align:left;font-weight:700;min-width:130px;">Field Changed</th>
+          <th style="padding:10px 12px;border:1px solid #9ca3af;text-align:left;font-weight:700;">Old Value</th>
+          <th style="padding:10px 12px;border:1px solid #9ca3af;text-align:left;font-weight:700;">New Value</th>
+        </tr>
+      </thead>
+      <tbody id="audit-tbody"></tbody>
+    </table>
+    <div id="audit-empty" style="text-align:center;padding:40px;color:#9ca3af;font-size:13px;">No changes logged yet.</div>
+  </div>
+</div>
+
+</div><!-- /main-content -->
+
+<!-- ADD/EDIT TASK MODAL -->
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-title">
+      <span id="modal-lbl">Add Task</span>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="field">
+      <label>Task / Ticket</label>
+      <input id="task-txt" type="text" placeholder="e.g. ZHIRE-2910: Feature name or Leave" autocomplete="off"/>
+    </div>
+    <div class="field">
+      <label>Type</label>
+      <div class="type-grid" id="type-grid">
+        <div class="type-opt sel" data-t="feature" onclick="selType(this)">Feature / Story</div>
+        <div class="type-opt" data-t="bug" onclick="selType(this)">Bug Fix</div>
+        <div class="type-opt" data-t="leave" onclick="selType(this)">Leave</div>
+        <div class="type-opt" data-t="automation" onclick="selType(this)">Automation</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>End Date <span style="font-weight:300;">(span across days)</span></label>
+      <input id="task-end" type="date"/>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTask()">Save Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- MEMBER MANAGER MODAL -->
+<div class="overlay" id="mem-overlay" onclick="if(event.target===this)closeMgrModal()">
+  <div class="modal" style="width:480px;">
+    <div class="modal-title">
+      <span>Manage Team Members</span>
+      <button class="modal-close" onclick="closeMgrModal()">×</button>
+    </div>
+    <div class="member-mgr" id="mem-list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeMgrModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMgr()">Save Members</button>
+    </div>
+  </div>
+</div>
+
+<script>
+
+// ═══════════════════════ DATA ═══════════════════════════════════════════════
+var DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var COLORS=['#2563eb','#dc2626','#7c3aed','#d97706','#0891b2','#16a34a','#db2777','#ea580c','#0d9488','#854d0e'];
+
+// Pre-loaded May 2026 data (spans: {text, type, start, end})
+var MEMBER_SPANS = {"m_shwetha": [{"text": "GDPR Testing", "type": "feature", "start": "2026-05-04", "end": "2026-05-08"}, {"text": "Core build certification", "type": "feature", "start": "2026-05-04", "end": "2026-05-08"}, {"text": "Meta build certification", "type": "feature", "start": "2026-05-04", "end": "2026-05-08"}, {"text": "Controller build certification", "type": "feature", "start": "2026-05-04", "end": "2026-05-08"}, {"text": "ZHIRE-2875: Selfserve Partner User replacement and Email update via UI", "type": "bug", "start": "2026-05-11", "end": "2026-05-13"}, {"text": "Searchable dropdown - Partner", "type": "feature", "start": "2026-05-14", "end": "2026-05-14"}, {"text": "ZBUGS-6974", "type": "bug", "start": "2026-05-15", "end": "2026-05-15"}, {"text": "Leave", "type": "leave", "start": "2026-05-21", "end": "2026-05-22"}], "m_soumya": [{"text": "TalentCommunity: Candidate engagement history", "type": "feature", "start": "2026-05-04", "end": "2026-05-05"}, {"text": "ZM Manage build certification", "type": "feature", "start": "2026-05-04", "end": "2026-05-05"}, {"text": "ZHIRE-2910: Self-Serve Requisition Approval Matrix & Field Configuration", "type": "bug", "start": "2026-05-06", "end": "2026-05-15"}, {"text": "ZHIRE-2910: Self-Serve Requisition Approval Matrix & Field Configuration - Automation", "type": "automation", "start": "2026-05-18", "end": "2026-05-20"}, {"text": "ZCF-2083: Create requisition on behalf of other user", "type": "bug", "start": "2026-05-21", "end": "2026-05-22"}, {"text": "ZCF-2072", "type": "bug", "start": "2026-05-27", "end": "2026-05-29"}], "m_palak": [{"text": "ZM Manage build certificaiton", "type": "feature", "start": "2026-05-04", "end": "2026-05-04"}, {"text": "ZAUTO Backlogs", "type": "automation", "start": "2026-05-05", "end": "2026-05-05"}, {"text": "Candidate Portal autotmation", "type": "feature", "start": "2026-05-06", "end": "2026-05-07"}, {"text": "ZCF-2078 (Partner Portal)", "type": "bug", "start": "2026-05-08", "end": "2026-05-08"}, {"text": "ZCF-2078(ZM Manage)", "type": "bug", "start": "2026-05-12", "end": "2026-05-12"}, {"text": "ZCF-2011", "type": "bug", "start": "2026-05-14", "end": "2026-05-14"}, {"text": "ZCF-2078(Manage/ER/IJP/Partner)", "type": "bug", "start": "2026-05-18", "end": "2026-05-19"}], "m_lahith": [{"text": "ZM Manage build certificaiton", "type": "feature", "start": "2026-05-04", "end": "2026-05-05"}, {"text": "ZHIRE-2725: Apply without resume", "type": "bug", "start": "2026-05-06", "end": "2026-05-13"}, {"text": "Automate ZHIRE-2725", "type": "automation", "start": "2026-05-14", "end": "2026-05-14"}, {"text": "ZCF-2016", "type": "bug", "start": "2026-05-15", "end": "2026-05-19"}, {"text": "ZCF-2057", "type": "bug", "start": "2026-05-20", "end": "2026-05-20"}], "m_abhilash": [{"text": "E2E RA Sanity on test companies", "type": "bug", "start": "2026-05-04", "end": "2026-05-04"}, {"text": "Q1 DAST scan and Akamai optimization - EIS", "type": "bug", "start": "2026-05-05", "end": "2026-05-08"}, {"text": "Security - RA", "type": "bug", "start": "2026-05-11", "end": "2026-05-12"}, {"text": "Leave", "type": "leave", "start": "2026-05-13", "end": "2026-05-14"}], "m_charmila": [{"text": "Interview build certification (12 APIs and bug fixes)", "type": "feature", "start": "2026-05-04", "end": "2026-05-07"}, {"text": "TalviewIVY Certification", "type": "feature", "start": "2026-05-04", "end": "2026-05-07"}, {"text": "ZM Manage Build certification", "type": "feature", "start": "2026-05-04", "end": "2026-05-07"}, {"text": "Trivy - Interview upgrade", "type": "bug", "start": "2026-05-11", "end": "2026-05-12"}, {"text": "Fitment ZCFs", "type": "bug", "start": "2026-05-13", "end": "2026-05-19"}, {"text": "ZCF-2002 and ZCF-2038", "type": "bug", "start": "2026-05-20", "end": "2026-05-25"}, {"text": "ZCF-1972", "type": "bug", "start": "2026-05-27", "end": "2026-05-29"}], "m_bhargav": [{"text": "Amplify build certification", "type": "feature", "start": "2026-05-04", "end": "2026-05-05"}, {"text": "ZBUGS-6811", "type": "bug", "start": "2026-05-06", "end": "2026-05-07"}, {"text": "Amplify build certification", "type": "feature", "start": "2026-05-12", "end": "2026-05-13"}, {"text": "ZCF-1964", "type": "bug", "start": "2026-05-14", "end": "2026-05-15"}, {"text": "ZCF-2037", "type": "bug", "start": "2026-05-18", "end": "2026-05-18"}, {"text": "ZCF-1937", "type": "bug", "start": "2026-05-21", "end": "2026-05-22"}], "m_surendra": [{"text": "Leave", "type": "leave", "start": "2026-05-04", "end": "2026-05-06"}, {"text": "Insights Phase 2", "type": "feature", "start": "2026-05-07", "end": "2026-05-12"}, {"text": "ZCF-2063", "type": "bug", "start": "2026-05-15", "end": "2026-05-20"}, {"text": "ZCF-1985", "type": "bug", "start": "2026-05-21", "end": "2026-05-22"}], "m_koushik": [{"text": "TalentIQ", "type": "feature", "start": "2026-05-04", "end": "2026-05-04"}, {"text": "BGV build certification", "type": "feature", "start": "2026-05-06", "end": "2026-05-06"}, {"text": "ZDEPLOY-3300 - BGV build certification", "type": "bug", "start": "2026-05-11", "end": "2026-05-15"}, {"text": "ZCF-1873", "type": "bug", "start": "2026-05-20", "end": "2026-05-25"}], "m_saquib": [{"text": "Automation Pass percentage increase", "type": "automation", "start": "2026-05-04", "end": "2026-05-15"}]};
+var FEATURES_DATA = [{"summary": "ZHIRE-3078: MLI Priority [Raise events in Assessment service on receiving DoSelect intermittent status updates to send r", "qa": "Charmila", "preprod": "15-May-2026", "committed": "23-Apr-2026", "comments": "Deployed on 21-04-2026", "services": "Assessment", "automation": "—"}, {"summary": "ZHIRE-2371  Revert Workflow Action (AVP)", "qa": "Bhargav and Shwetha", "preprod": "15-May-2026", "committed": "28-Apr-2026", "comments": "Moved dates from 23rd to 28th due to LPAT observations in TalentIQ", "services": "Workflow, ZM Manage", "automation": "ZAUTO-344"}, {"summary": "ZHIRE-2947: Bulk Action – Mark as Joined", "qa": "Palak", "preprod": "15-May-2026", "committed": "28-Apr-2026", "comments": "Moved dates from 23rd to 28th due to LPAT observations in TalentIQ", "services": "ZM Manage and Notification", "automation": "ZAUTO-343"}, {"summary": "ZHIRE-3130: Talview IVY Integration", "qa": "Charmila", "preprod": "15-May-2026", "committed": "28-Apr-2026", "comments": "Moved dates from 23rd to 28th due to LPAT observations in TalentIQ\nDeployed on 12-05-2026", "services": "", "automation": "—"}, {"summary": "ZCOMM-1278: Dashboard and Reports Showing Data Mismatch When Time Zone Is Changed", "qa": "Surendra", "preprod": "Preprod date", "committed": "28-Apr-2026", "comments": "On Track", "services": "ES", "automation": "—"}, {"summary": "ZCF-1973 - Face to Face interview mode - Google meet link is being sent - Backend completed. FED to pick - ZHIRE-3068. D", "qa": "Charmila", "preprod": "", "committed": "28-Apr-2026", "comments": "Deployed on 23-04-2026", "services": "Old UI, ZM Manage, Candidate Build, Interview", "automation": "—"}, {"summary": "ZCF-1982 - Interview Mode 'Phone call' : Google Meet Link sent in the calendar invite.", "qa": "Charmila", "preprod": "", "committed": "28-Apr-2026", "comments": "Deployed on 23-04-2026", "services": "Old UI, ZM Manage, Candidate Build, Interview", "automation": "—"}, {"summary": "ZCF-1978 - Zoom Interview Mode - Google meet link is being sent along with zoom link", "qa": "Charmila", "preprod": "", "committed": "28-Apr-2026", "comments": "Deployed on 23-04-2026", "services": "Old UI, ZM Manage, Candidate Build, Interview", "automation": "—"}, {"summary": "Zeva chatbot", "qa": "Lahith", "preprod": "15-May-2026", "committed": "28-Apr-2026", "comments": "Deployed on 23-04-2026", "services": "", "automation": "—"}, {"summary": "ZBUGS-6811", "qa": "Bhargav", "preprod": "Preprod date", "committed": "08-May-2026", "comments": "", "services": "", "automation": "—"}, {"summary": "ZHIRE-2725: Apply without Resume", "qa": "Lahith", "preprod": "", "committed": "14-May-2026", "comments": "", "services": "", "automation": "—"}, {"summary": "ZCF-2056: Fleetguard - C3 - BGV Integration", "qa": "Koushik", "preprod": "Pending", "committed": "14-May-2026", "comments": "Will be available from 11th May", "services": "", "automation": "—"}, {"summary": "ZCF-2078: Age Not Getting Auto-Calculated in other portals Apply Experience", "qa": "Palak", "preprod": "15-May-2026", "committed": "21-May-2026", "comments": "", "services": "ZM Manage", "automation": "https://infoedge.atlassian.net/browse/ZAUTO-349"}, {"summary": "ZCF-1930: ITC Infotech-C3-Email notification on partner being enabled for a job to capture the Job Reference ID", "qa": "Surendra", "preprod": "13-May-2026", "committed": "19-May-2026", "comments": "Deployed to Prod on 14th May", "services": "Jobs", "automation": "ZAUTO-347"}, {"summary": "ZCF-2070: GDPR & DPDPA Compliance", "qa": "Shwetha", "preprod": "15-May-2026", "committed": "19-May-2026", "comments": "", "services": "", "automation": "ZAUTO-346"}, {"summary": "Unable to tag users in Talent Pool notes when candidate is not mapped to any Job || IRClass - Impl and Production - ZCF-", "qa": "Palak", "preprod": "14-May-2026", "committed": "19-May-2026", "comments": "", "services": "Controller", "automation": "https://infoedge.atlassian.net/browse/ZAUTO-354"}, {"summary": "ZHIRE-2910: Self-Serve Requisition Approval Matrix & Field Configuration", "qa": "Soumya", "preprod": "15-May-2026", "committed": "21-May-2026", "comments": "", "services": "Requisition, Identity and ZM Manage", "automation": "https://infoedge.atlassian.net/browse/ZAUTO-353"}, {"summary": "ZHIRE-2875: Selfserve Partner User replacement and Email update via UI", "qa": "Shwetha", "preprod": "15-May-2026", "committed": "21-May-2026", "comments": "", "services": "", "automation": "ZAUTO-345"}, {"summary": "ZCF-2016: Enable searchable dropdown for all applicable fields across the platform - ZDEPLOY-3435 [ZHIRE-3260] - Only In", "qa": "Lahith", "preprod": "", "committed": "21-May-2026", "comments": "", "services": "ZM Manage, Jobs, Interview, Applies", "automation": "—"}, {"summary": "ZCF-1929: ITC Infotech-C3-End date to change dynamically upon change in start date/contract duration in Fitment", "qa": "Charmila", "preprod": "13-May-2026", "committed": "21-May-2026", "comments": "", "services": "ZM Manage and Old UI", "automation": "https://infoedge.atlassian.net/browse/ZAUTO-351"}, {"summary": "ZCF-1957: Fitment calculation", "qa": "Charmila", "preprod": "13-May-2026", "committed": "21-May-2026", "comments": "", "services": "Fitment", "automation": "https://infoedge.atlassian.net/browse/ZAUTO-348"}, {"summary": "ZCF-2037: Need to create an error message for duplicate reference number while creating requisition", "qa": "Bhargav", "preprod": "18-May-2026", "committed": "21-May-2026", "comments": "", "services": "Requisition, ZM Manage", "automation": "—"}, {"summary": "ZCF-2060: Fitment Dependent field value storing Isssue.", "qa": "Charmila", "preprod": "13-May-2026", "committed": "21-May-2026", "comments": "", "services": "ZM Manage and Old UI", "automation": "https://infoedge.atlassian.net/browse/ZAUTO-352"}, {"summary": "ZCF-1964 [ZHIRE-3410]: Enable tagged-user email notifications for Job and Candidate Notes with custom note content", "qa": "Bhargav", "preprod": "14-May-2026", "committed": "21-May-2026", "comments": "", "services": "Core, Requisition", "automation": "—"}, {"summary": "Bajaj General Insurance - 15061 - C2 |  To add new source 'Alumni' in 'Apply Source' - browse - ZCF-1935", "qa": "Palak", "preprod": "15-May-2026", "committed": "21-May-2026", "comments": "", "services": "Core", "automation": "https://infoedge.atlassian.net/browse/ZAUTO-350"}, {"summary": "ZCF-2063: Segregation of Admin Rights", "qa": "Surendra", "preprod": "15-May-2026", "committed": "21-May-2026", "comments": "Should be able to deploy by 21st May", "services": "Identity, ZM Manage", "automation": "ZAUTO-355"}, {"summary": "ZCF-1937: Character Limit Validation for Requisition Fields (Requisition Description and Roles and Responsibilities) - Z", "qa": "Bhargav", "preprod": "21-May-2026", "committed": "26-May-2026", "comments": "", "services": "ZM Manage", "automation": "—"}, {"summary": "ZCF-2072: KVB - Ability to Mark Individual Documents as Insufficient During Candidate Onboarding", "qa": "Soumya", "preprod": "15-May-2026", "committed": "Pending", "comments": "", "services": "Document, ZM Manage, Candidate Portal", "automation": "—"}, {"summary": "ZCF-1983: Missing details in Candidate & Interviewers calendar invitation", "qa": "Charmila", "preprod": "Pending", "committed": "Pending", "comments": "", "services": "Interview", "automation": "—"}, {"summary": "ZCF-2038: The view interview feedback screen needs some adjustment", "qa": "Charmila", "preprod": "Pending", "committed": "28-May-2026", "comments": "", "services": "ZM Manage", "automation": "—"}, {"summary": "[ZHIRE-3408]: Introduce “On Hold” Job Status to Make Jobs Inactive - ZCF-1961", "qa": "", "preprod": "Pending", "committed": "", "comments": "", "services": "Jobs", "automation": "—"}, {"summary": "[ZHIRE-3428]: Shearwater - Ability to capture SubSource via ProfileCreate Api - ZCF-2057", "qa": "Lahith", "preprod": "", "committed": "", "comments": "", "services": "", "automation": "—"}, {"summary": "ZCF-1985: Inconsistent Filter Behavior Between Dashboard and Insights", "qa": "Surendra", "preprod": "19-May-2026", "committed": "28-May-2026", "comments": "", "services": "", "automation": "ZAUTO-356"}, {"summary": "ZCF-2002: Crisil - C3 - 15438 | Interview Auto Scheduler Feedback", "qa": "Charmila", "preprod": "21-May-2026", "committed": "28-May-2026", "comments": "", "services": "Interview / Ext Interview", "automation": "—"}, {"summary": "ZCF-1972: Notify Recruiter and Interviewer on Candidate’s Interview Updates", "qa": "Charmila", "preprod": "26-May-2026", "committed": "04-Jun-2026", "comments": "", "services": "Interview / ZM Manage", "automation": "—"}, {"summary": "ZCF-2072: KVB – Ability to Mark Individual Documents as Insufficient During Candidate Onboarding", "qa": "Soumya", "preprod": "26-May-2026", "committed": "02-Jun-2026", "comments": "", "services": "Document Service / Candidate Portal / ZM Manage", "automation": "—"}, {"summary": "ZCF-1873: HappiestMinds Enhancement: Add % Match and Improve Talent Pool Search Accuracy", "qa": "Koushik", "preprod": "14-May-2026", "committed": "26-May-2026", "comments": "", "services": "Leads", "automation": "—"}, {"summary": "ZCF-2005: Enhancements In Filters Across Dashboard, Insights, Requisition, Jobs Page & Reports", "qa": "Surendra", "preprod": "20-May-2026", "committed": "28-May-2026", "comments": "", "services": "Insights | UI", "automation": "—"}, {"summary": "ZCF-2083: Create requisition on behalf of other user", "qa": "Soumya", "preprod": "18-May-2026", "committed": "26-May-2026", "comments": "", "services": "Requisition", "automation": "—"}];
+
+// State
+var members = [{"id": "m_shwetha", "name": "Shwetha", "color": "#2563eb"}, {"id": "m_soumya", "name": "Soumya", "color": "#7c3aed"}, {"id": "m_palak", "name": "Palak", "color": "#0891b2"}, {"id": "m_lahith", "name": "Lahith", "color": "#1db872"}, {"id": "m_abhilash", "name": "Abhilash", "color": "#d97706"}, {"id": "m_charmila", "name": "Charmila", "color": "#ff6b9d"}, {"id": "m_bhargav", "name": "Bhargav", "color": "#e84040"}, {"id": "m_surendra", "name": "Surendra", "color": "#9d6bff"}, {"id": "m_koushik", "name": "Koushik", "color": "#43d9a2"}, {"id": "m_saquib", "name": "Saquib", "color": "#f0a500"}];
+var customSpans = {}; // member_id -> [{text,type,start,end}] — user-added
+var weekStart = null;
+var pendingCell = null; // {memberId, dateStr}
+var editingSpan = null; // {memberId, idx}
+var ftSortCol = 'committed', ftSortAsc = true;
+var auditLog = [];    // [{ts, feature, field, oldVal, newVal}]
+var bugsData = {};    // key: feature index → [{id, summary, severity, status}]
+var deployedFeatures = {}; // key: feature index → true/false
+var effortData = {}; // key: feature index → effort string
+var currentTab = 'calendar';
+
+// ═══════════════════════ INIT ════════════════════════════════════════════════
+function init(){
+  var saved = localStorage.getItem('qa_tracker_v3');
+  if(saved){
+    try{
+      var s = JSON.parse(saved);
+      if(s.members) members = s.members;
+      if(s.customSpans) customSpans = s.customSpans;
+    if(s.deployedFeatures) deployedFeatures = s.deployedFeatures;
+    if(s.effortData){
+      effortData = s.effortData;
+      Object.keys(effortData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].effort=effortData[k]; });
+    }
+    if(s.auditLog) auditLog = s.auditLog;
+    if(s.bugsData) bugsData = s.bugsData;
+    }catch(e){}
+  }
+  // Start at May 1 2026
+  // Restore user identity
+  var savedId = localStorage.getItem('qa_user_identity');
+  if(savedId) document.getElementById('user-identity').value = savedId;
+
+  var d = new Date(2026, 4, 1);
+  d.setHours(0,0,0,0);
+  var dow = d.getDay();
+  d.setDate(d.getDate() - (dow===0?6:dow-1));
+  weekStart = d;
+  render();
+}
+
+function saveData(){
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  var b = document.querySelector('.btn-primary[onclick="saveData()"]');
+  b.textContent = '✓ Saved'; setTimeout(()=>b.textContent='💾 Save', 1500);
+}
+
+// ═══════════════════════ DATE HELPERS ════════════════════════════════════════
+function ds(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function addDays(d,n){ var r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function isToday(d){ return ds(d)===ds(new Date()); }
+function isWknd(d){ return d.getDay()===0||d.getDay()===6; }
+function shiftWeek(n){ weekStart=addDays(weekStart,n*7); render(); }
+function goToday(){ var d=new Date(); d.setHours(0,0,0,0); var dow=d.getDay(); d.setDate(d.getDate()-(dow===0?6:dow-1)); weekStart=d; render(); }
+function getDates(){ var r=[]; for(var i=0;i<14;i++) r.push(addDays(weekStart,i)); return r; }
+function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ═══════════════════════ RENDER CALENDAR ════════════════════════════════════
+function cellClick(el){
+  openModal(el.dataset.mid, el.dataset.ds);
+}
+function chipDel(el){
+  deleteSpan(el.dataset.mid, el.dataset.start, el.dataset.text);
+}
+
+function render(){
+  var dates = getDates();
+  var ws = weekStart, we = addDays(weekStart,13);
+  document.getElementById('week-label').textContent =
+    DAYS[ws.getDay()]+' '+ws.getDate()+' '+MONTHS[ws.getMonth()]+
+    ' – '+DAYS[we.getDay()]+' '+we.getDate()+' '+MONTHS[we.getMonth()]+' '+we.getFullYear();
+
+  var viewStart = ds(dates[0]);
+  var viewEnd   = ds(dates[dates.length-1]);
+
+  // HEAD
+  var headHtml = '<tr><th class="th-corner">MEMBER</th>';
+  dates.forEach(function(d){
+    var cls = 'th-date'+(isWknd(d)?' weekend':'')+(isToday(d)?' today':'');
+    headHtml += '<th class="'+cls+'"><div class="th-day">'+DAYS[d.getDay()]+'</div><div class="th-num">'+d.getDate()+' '+MONTHS[d.getMonth()]+'</div></th>';
+  });
+  headHtml += '</tr>';
+  document.getElementById('cal-head').innerHTML = headHtml;
+
+  // Build date→colIndex map for quick lookup
+  var dateToCol = {};
+  dates.forEach(function(d, i){ dateToCol[ds(d)] = i; });
+
+  // BODY
+  var bodyHtml = '';
+  members.forEach(function(m){
+    var allSpans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[])
+      .filter(function(s){ return s.end >= viewStart && s.start <= viewEnd; });
+
+    // Assign lanes greedily
+    allSpans.forEach(function(s){ s._lane = -1; });
+    var lanes = [];
+    var byStart = allSpans.slice().sort(function(a,b){ return a.start<b.start?-1:1; });
+    byStart.forEach(function(span){
+      var placed = false;
+      for(var li=0; li<lanes.length; li++){
+        var last = lanes[li][lanes[li].length-1];
+        if(last.end < span.start){ lanes[li].push(span); span._lane=li; placed=true; break; }
+      }
+      if(!placed){ span._lane=lanes.length; lanes.push([span]); }
+    });
+
+    var numLanes = Math.max(lanes.length, 1);
+    var rowH = Math.max(44, numLanes * 28 + 10);
+
+    // Row: name cell + day cells
+    // Chips rendered inside FIRST visible cell of each span using overflow:visible
+    bodyHtml += '<tr style="height:'+rowH+'px;">';
+
+    // Name cell
+    var initials = m.name.slice(0,2).toUpperCase();
+    bodyHtml += '<td class="td-name" style="height:'+rowH+'px;">'
+      + '<div class="member-inner">'
+      + '<div class="member-av" style="background:'+m.color+'22;color:'+m.color+'">'+initials+'</div>'
+      + '<div class="member-nm">'+escH(m.name)+'</div>'
+      + '</div></td>';
+
+    // Build chip HTML per start-column
+    var chipsByCol = {};
+    allSpans.forEach(function(span){
+      var spanS = new Date(span.start+'T00:00:00');
+      var spanE = new Date(span.end+'T00:00:00');
+      var viewS = dates[0];
+      var viewE = dates[dates.length-1];
+      var effStart = spanS < viewS ? viewS : spanS;
+      var effEnd   = spanE > viewE ? viewE  : spanE;
+      if(effStart > effEnd) return;
+
+      var startCol = dateToCol[ds(effStart)];
+      if(startCol === undefined) return;
+
+      // Count ALL days from effStart to effEnd that are in the view
+      var colCount = 0;
+      var d2 = new Date(effStart);
+      while(ds(d2) <= ds(effEnd) && ds(d2) <= ds(viewE)){
+        colCount++;
+        d2.setDate(d2.getDate()+1);
+      }
+      if(colCount < 1) return;
+
+      var chipW  = colCount * 110 - 6;
+      var top    = span._lane * 28 + 4;
+      var typeClass = 'type-'+(span.type||'feature');
+      var rLeft  = spanS >= viewS ? '4px' : '0';
+      var rRight = spanE <= viewE ? '4px' : '0';
+      var bLeft  = spanS < viewS  ? 'border-left:none;' : '';
+
+      var isCustom = (customSpans[m.id]||[]).some(function(cs){ return cs===span; });
+      var delBtn = isCustom
+        ? '<button class="chip-del" data-mid="'+m.id+'" data-start="'+escH(span.start)+'" data-text="'+escH(span.text)+'" onclick="event.stopPropagation();chipDel(this)">×</button>'
+        : '';
+
+      var chip = '<div class="span-chip '+typeClass+'" '
+        + 'style="position:absolute;left:2px;top:'+top+'px;width:'+chipW+'px;'
+        + 'border-radius:'+rLeft+' '+rRight+' '+rRight+' '+rLeft+';'+bLeft+'" '
+        + 'title="'+escH(span.text)+'">'
+        + escH(span.text.length>42?span.text.substring(0,40)+'…':span.text)
+        + delBtn + '</div>';
+
+      if(!chipsByCol[startCol]) chipsByCol[startCol] = '';
+      chipsByCol[startCol] += chip;
+    });
+
+    // Render day cells — chip cells get overflow:visible so chips bleed right
+    dates.forEach(function(d, colIdx){
+      var dateStr = ds(d);
+      var cls = 'td-day'+(isWknd(d)?' weekend':'')+(isToday(d)?' today':'');
+      var hasChips = !!chipsByCol[colIdx];
+      var attrs = isWknd(d)?'':'data-mid="'+m.id+'" data-ds="'+dateStr+'" onclick="cellClick(this)"';
+      // overflow:visible so chips extend into adjacent cells (weekends etc.)
+      var extra = hasChips ? 'overflow:visible;z-index:3;' : '';
+      bodyHtml += '<td class="'+cls+'" '+attrs+' style="height:'+rowH+'px;'+extra+'">';
+      if(hasChips) bodyHtml += chipsByCol[colIdx];
+      if(!isWknd(d)) bodyHtml += '<div class="add-hint">+</div>';
+      bodyHtml += '</td>';
+    });
+
+    bodyHtml += '</tr>';
+  });
+
+  document.getElementById('cal-body').innerHTML = bodyHtml;
+}
+
+
+// ═══════════════════════ MODAL ══════════════════════════════════════════════
+function openModal(memberId, dateStr){
+  pendingCell = {memberId, dateStr};
+  editingSpan = null;
+  var m = members.find(x=>x.id===memberId);
+  var d = new Date(dateStr+'T00:00:00');
+  document.getElementById('modal-lbl').textContent = 'Add Task — '+m.name+' · '+DAYS[d.getDay()]+' '+d.getDate()+' '+MONTHS[d.getMonth()];
+  document.getElementById('task-txt').value = '';
+  document.getElementById('task-end').value = dateStr;
+  selTypeByName('feature');
+  document.getElementById('overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('task-txt').focus(), 80);
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); pendingCell=null; editingSpan=null; }
+
+function selType(el){
+  document.querySelectorAll('.type-opt').forEach(x=>x.classList.remove('sel'));
+  el.classList.add('sel');
+}
+function selTypeByName(t){
+  document.querySelectorAll('.type-opt').forEach(x=>x.classList.toggle('sel', x.dataset.t===t));
+}
+function getSelType(){ var el=document.querySelector('.type-opt.sel'); return el?el.dataset.t:'feature'; }
+
+function saveTask(){
+  var text = document.getElementById('task-txt').value.trim();
+  if(!text){ document.getElementById('task-txt').focus(); return; }
+  var type = getSelType();
+  var start = pendingCell.dateStr;
+  var end   = document.getElementById('task-end').value || start;
+  if(end < start) end = start;
+
+  var mid = pendingCell.memberId;
+  if(!customSpans[mid]) customSpans[mid] = [];
+  customSpans[mid].push({text, type, start, end});
+
+  closeModal();
+  saveData();
+  render();
+}
+
+function deleteSpan(memberId, start, text){
+  if(!customSpans[memberId]) return;
+  var idx = customSpans[memberId].findIndex(function(s){ return s.start===start && s.text===text; });
+  if(idx >= 0){ customSpans[memberId].splice(idx,1); saveData(); render(); }
+}
+
+document.addEventListener('keydown', function(e){
+  if(e.key==='Escape'){
+    if(document.getElementById('overlay').classList.contains('open')) closeModal();
+    if(document.getElementById('mem-overlay').classList.contains('open')) closeMgrModal();
+  }
+  if(e.key==='Enter' && e.target.id==='task-txt') saveTask();
+});
+
+// ═══════════════════════ MEMBER MANAGER ═════════════════════════════════════
+var tmpMembers = [];
+function openMemberMgr(){ tmpMembers=JSON.parse(JSON.stringify(members)); renderMgr(); document.getElementById('mem-overlay').classList.add('open'); }
+function closeMgrModal(){ document.getElementById('mem-overlay').classList.remove('open'); }
+function saveMgr(){ members=tmpMembers.filter(m=>m.name.trim()); closeMgrModal(); saveData(); render(); }
+
+function renderMgr(){
+  var html = '';
+  tmpMembers.forEach(function(m,i){
+    var init = m.name.slice(0,2).toUpperCase();
+    html += '<div class="mem-row">';
+    html += '<div class="member-av" style="background:'+m.color+'22;color:'+m.color+';width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;font-family:var(--mono);flex-shrink:0;">'+init+'</div>';
+    html += '<input value="'+escH(m.name)+'" oninput="tmpMembers['+i+'].name=this.value"/>';
+    html += '<div class="swatches">';
+    COLORS.forEach(function(c){
+      html += '<div class="swatch'+(m.color===c?' sel':'')+'" style="background:'+c+'" onclick="tmpMembers['+i+'].color=\''+c+'\';renderMgr()"></div>';
+    });
+    html += '</div>';
+    html += '<button class="del-btn" onclick="tmpMembers.splice('+i+',1);renderMgr()">×</button>';
+    html += '</div>';
+  });
+  html += '<button class="add-mem-btn" onclick="tmpMembers.push({id:\'m\'+Date.now(),name:\'New Member\',color:\''+COLORS[tmpMembers.length%COLORS.length]+'\'});renderMgr()">+ Add Member</button>';
+  document.getElementById('mem-list').innerHTML = html;
+}
+
+// ═══════════════════════ TAB SWITCHING ══════════════════════════════════════
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.main-tab').forEach(function(t){ t.classList.remove('active'); });
+  document.getElementById('tab-'+tab).classList.add('active');
+  var isCal = tab==='calendar';
+  var isFeat = tab==='features';
+  var isAudit = tab==='audit';
+  document.getElementById('cal-outer').style.display = isCal?'block':'none';
+  document.getElementById('legend-bar').style.display = isCal?'flex':'none';
+  document.getElementById('features-view').style.display = isFeat?'block':'none';
+  document.getElementById('audit-view').style.display = isAudit?'block':'none';
+  document.getElementById('main-content').style.overflow='hidden';
+  document.getElementById('week-nav').style.display = isCal?'flex':'none';
+  document.getElementById('btn-members').style.display = isCal?'':'none';
+  document.getElementById('btn-cal-upload').style.display = isCal?'':'none';
+  document.getElementById('btn-export').style.display = isCal?'':'none';
+  document.getElementById('user-id-wrap').style.display = isAudit?'none':'flex';
+  document.getElementById('week-nav-sep').style.display = isCal?'':'none';
+  if(isFeat) renderFeatures();
+  if(isAudit) renderAudit();
+  // Hide import status when leaving calendar
+  if(!isCal){ var isb=document.getElementById('import-status-bar'); if(isb) isb.style.display='none'; }
+}
+
+// ═══════════════════════ FEATURES TABLE ══════════════════════════════════════
+function sortFt(col){
+  if(ftSortCol===col) ftSortAsc=!ftSortAsc; else { ftSortCol=col; ftSortAsc=true; }
+  document.getElementById('s-preprod').textContent   = ftSortCol==='preprod'   ?(ftSortAsc?'↑':'↓'):'';
+  document.getElementById('s-committed').textContent = ftSortCol==='committed' ?(ftSortAsc?'↑':'↓'):'';
+  renderFeatures();
+}
+
+function saveEffort(idx, val){
+  effortData[idx] = val;
+  if(FEATURES_DATA[idx]) FEATURES_DATA[idx].effort = val;
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+}
+
+function toggleDeploy(idx){
+  deployedFeatures[idx] = !deployedFeatures[idx];
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  renderFeatures();
+}
+
+
+// ═══════════════ AUDIT LOG ════════════════════════════════════════════════════
+function saveIdentity(){
+  var val = document.getElementById('user-identity').value.trim();
+  localStorage.setItem('qa_user_identity', val);
+}
+function getIdentity(){
+  return localStorage.getItem('qa_user_identity') || document.getElementById('user-identity')?.value.trim() || 'Unknown';
+}
+
+function logChange(featureSummary, field, oldVal, newVal){
+  var entry = {
+    ts: new Date().toLocaleString(),
+    user: getIdentity(),
+    feature: featureSummary,
+    field: field,
+    oldVal: String(oldVal||'—'),
+    newVal: String(newVal||'—')
+  };
+  auditLog.unshift(entry);
+  if(auditLog.length > 500) auditLog.length = 500;
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+}
+
+function renderAudit(){
+  var tbody = document.getElementById('audit-tbody');
+  var empty = document.getElementById('audit-empty');
+  if(!auditLog.length){ tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  tbody.innerHTML = auditLog.map(function(e){
+    return '<tr style="border-bottom:1px solid #e5e7eb;">'
+      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-family:monospace;font-size:11.5px;color:#6b7280;white-space:nowrap;">'+e.ts+'</td>'
+      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12px;color:#2563eb;font-weight:600;white-space:nowrap;">'+escH(e.user||'—')+'</td>'
+      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12.5px;font-weight:500;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escH(e.feature)+'</td>'
+      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12px;color:#2563eb;font-weight:600;">'+escH(e.field)+'</td>'
+      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12px;color:#dc2626;max-width:180px;">'+escH(e.oldVal)+'</td>'
+      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12px;color:#16a34a;max-width:180px;">'+escH(e.newVal)+'</td>'
+      +'</tr>';
+  }).join('');
+}
+
+function clearAudit(){
+  auditLog = [];
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  renderAudit();
+}
+
+// ═══════════════ EXCEL UPSERT ════════════════════════════════════════════════
+function importCalendarExcel(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  function showStatus(msg, color){
+    var bar = document.getElementById('import-status-bar');
+    var txt = document.getElementById('import-status-text');
+    if(!bar || !txt) return;
+    txt.textContent = msg;
+    txt.style.color = color || '#374151';
+    bar.style.background = color==='#dc2626' ? '#fef2f2' : color==='#16a34a' ? '#f0fdf4' : '#f8fafc';
+    bar.style.borderColor = color==='#dc2626' ? '#fca5a5' : color==='#16a34a' ? '#86efac' : '#e2e6ed';
+    bar.style.display = 'flex';
+  }
+  showStatus('📂 Reading file...', '#6b7280');
+
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      var wb = XLSX.read(ev.target.result, {
+        type: file.name.endsWith('.csv') ? 'string' : 'array',
+        cellDates: true
+      });
+
+      // Pick sheet: try current month name, then MAY, then first
+      var months=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      var cur = months[new Date().getMonth()];
+      var sheetName = wb.SheetNames.find(function(s){ return s.toUpperCase()===cur; })
+                   || wb.SheetNames.find(function(s){ return s.toUpperCase()==='MAY'; })
+                   || wb.SheetNames[0];
+      var ws = wb.Sheets[sheetName];
+
+      // ── Step 1: Expand merged cells ──────────────────────────────────────
+      // SheetJS only populates the top-left cell of a merge
+      // We copy that value to every cell in the merge range
+      var merges = ws['!merges'] || [];
+      merges.forEach(function(merge){
+        var topLeftAddr = XLSX.utils.encode_cell({r: merge.s.r, c: merge.s.c});
+        var topLeftCell = ws[topLeftAddr];
+        if(!topLeftCell) return;
+        for(var r = merge.s.r; r <= merge.e.r; r++){
+          for(var c = merge.s.c; c <= merge.e.c; c++){
+            if(r === merge.s.r && c === merge.s.c) continue; // skip top-left itself
+            var addr = XLSX.utils.encode_cell({r: r, c: c});
+            ws[addr] = {t: topLeftCell.t, v: topLeftCell.v, w: topLeftCell.w};
+          }
+        }
+      });
+
+      // ── Step 2: Read all cells into a 2D array ────────────────────────────
+      var range = XLSX.utils.decode_range(ws['!ref']);
+      var numRows = range.e.r + 1;
+      var numCols = range.e.c + 1;
+
+      var grid = [];
+      for(var r = 0; r < numRows; r++){
+        var row = [];
+        for(var c = 0; c < numCols; c++){
+          var addr = XLSX.utils.encode_cell({r: r, c: c});
+          var cell = ws[addr];
+          row.push(cell ? cell.v : null);
+        }
+        grid.push(row);
+      }
+
+      // ── Step 3: Build date map from header row ────────────────────────────
+      var headerRow = grid[0];
+      var dateMap = {}; // colIdx → 'YYYY-MM-DD'
+      headerRow.forEach(function(val, ci){
+        if(!val) return;
+        var d = null;
+        if(val instanceof Date){ d = val; }
+        else if(typeof val === 'number'){
+          // Excel serial date
+          d = new Date(Math.round((val - 25569) * 86400 * 1000));
+        } else if(typeof val === 'string'){
+          var m = val.match(/([0-9]{4})[-\/]([0-9]{1,2})[-\/]([0-9]{1,2})/);
+          if(m) d = new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3]));
+        }
+        if(d && !isNaN(d.getTime())){
+          dateMap[ci] = d.getFullYear()+'-'
+            +String(d.getMonth()+1).padStart(2,'0')+'-'
+            +String(d.getDate()).padStart(2,'0');
+        }
+      });
+
+      var dateCols = Object.keys(dateMap).map(Number).sort(function(a,b){return a-b;});
+      if(dateCols.length === 0){
+        showStatus('❌ No date columns found in header row. Check your Excel format.', '#dc2626');
+        return;
+      }
+
+      // ── Step 4: Process each member row ──────────────────────────────────
+      var added=0, updated=0, skipped=0;
+
+      function getType(t){
+        var tl = t.toLowerCase();
+        if(tl.includes('leave')) return 'leave';
+        if(tl.includes('automat')||tl.includes('zauto')||tl.includes('zcf')||tl.includes('zcomm')||tl.includes('zdeploy')) return 'automation';
+        if(tl.includes('zhire')||tl.includes('zbugs')||tl.includes('zra')||tl.includes('zamp')||
+           tl.includes('security')||tl.includes('dast')||tl.includes('trivy')||tl.includes('sanity')) return 'bug';
+        return 'feature';
+      }
+
+      for(var ri = 1; ri < grid.length; ri++){
+        var row = grid[ri];
+        var name = row[0] ? String(row[0]).trim() : '';
+        if(!name || name.toLowerCase()==='qa') continue;
+
+        var mid = 'm_' + name.toLowerCase().replace(/\s+/g,'_');
+        // Add member if not exists
+        if(!members.find(function(m){ return m.id===mid; })){
+          var palette=['#2563eb','#7c3aed','#0891b2','#16a34a','#d97706','#dc2626','#db2777'];
+          members.push({id:mid, name:name, color:palette[members.length % palette.length]});
+        }
+        if(!customSpans[mid]) customSpans[mid] = [];
+        var seededSpans = MEMBER_SPANS[mid] || [];
+
+        // Collect (dateStr, text) for each date column with a value
+        var cells = [];
+        dateCols.forEach(function(ci){
+          var raw = row[ci];
+          if(raw === null || raw === undefined || raw === '') return;
+          var text = String(raw).trim();
+          // Normalise multiline — take first non-empty line as task title
+          var lines = text.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+          // If multiple lines, create separate entries for each
+          lines.forEach(function(line){
+            if(line) cells.push({dateStr: dateMap[ci], text: line});
+          });
+        });
+
+        // Group consecutive same-text cells into spans
+        var spans = [];
+        var cur = null;
+        cells.forEach(function(c){
+          if(cur && cur.text === c.text){
+            cur.end = c.dateStr;
+          } else {
+            if(cur) spans.push(cur);
+            cur = {text: c.text, start: c.dateStr, end: c.dateStr};
+          }
+        });
+        if(cur) spans.push(cur);
+
+        // Upsert each span
+        spans.forEach(function(span){
+          var type = getType(span.text);
+          // Already in seeded data? Skip
+          var inSeeded = seededSpans.some(function(s){
+            return s.text === span.text && s.start === span.start;
+          });
+          if(inSeeded){ skipped++; return; }
+          // Already in customSpans?
+          var existIdx = customSpans[mid].findIndex(function(s){
+            return s.text === span.text && s.start === span.start;
+          });
+          if(existIdx >= 0){
+            if(customSpans[mid][existIdx].end !== span.end){
+              customSpans[mid][existIdx].end = span.end;
+              updated++;
+            } else { skipped++; }
+          } else {
+            customSpans[mid].push({text: span.text, type: type, start: span.start, end: span.end});
+            added++;
+          }
+        });
+      }
+
+      logChange('Calendar', 'Excel Import ('+sheetName+')', '—',
+        added+' added, '+updated+' updated, '+skipped+' unchanged');
+      saveData();
+      render();
+
+      var msg = 'Sheet "'+sheetName+'": '+added+' new, '+updated+' updated, '+skipped+' unchanged';
+      showStatus('✓ ' + msg, '#16a34a');
+      console.log('Calendar import:', msg);
+
+    }catch(err){
+      console.error('Import error:', err);
+      showStatus('❌ Error: ' + err.message, '#dc2626');
+    }
+  };
+
+  if(file.name.endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+  e.target.value='';
+}
+
+
+function upsertFromExcel(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  var status = document.getElementById('upsert-status');
+  status.textContent = 'Reading...';
+  status.style.color = '#6b7280';
+
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      var wb = XLSX.read(ev.target.result, {type: file.name.endsWith('.csv')?'string':'array'});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(rows.length < 2){ status.textContent='Empty sheet'; return; }
+
+      var headers = rows[0].map(function(h){ return String(h||'').trim().toLowerCase(); });
+      var col = function(name){ return headers.findIndex(function(h){ return h.includes(name); }); };
+
+      var cSum     = col('feature') >= 0 ? col('feature') : col('summary');
+      var cQA      = col('qa owner') >= 0 ? col('qa owner') : col('qa');
+      var cEffort  = col('effort');
+      var cPreprod = col('preprod');
+      var cCommit  = col('committed');
+      var cComment = col('comment');
+      var cService = col('service');
+      var cAuto    = col('automation');
+
+      if(cSum < 0){ status.textContent='No feature/summary column found'; status.style.color='#dc2626'; return; }
+
+      var added=0, updated=0;
+      rows.slice(1).forEach(function(row){
+        if(!row[cSum] || !String(row[cSum]).trim()) return;
+        var summary = String(row[cSum]).trim();
+
+        // Find existing feature by matching summary
+        var existIdx = FEATURES_DATA.findIndex(function(f){
+          return f.summary.toLowerCase().includes(summary.toLowerCase()) ||
+                 summary.toLowerCase().includes(f.summary.toLowerCase().substring(0,20));
+        });
+
+        function fmt(v){
+          if(!v || String(v).trim()==='') return '';
+          if(v instanceof Date) return v.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}).replace(/ /g,'-');
+          return String(v).trim();
+        }
+
+        var newData = {
+          summary: summary,
+          qa:       cQA>=0      ? fmt(row[cQA])      : '',
+          effort:   cEffort>=0  ? fmt(row[cEffort])   : '',
+          preprod:  cPreprod>=0 ? fmt(row[cPreprod])  : '',
+          committed:cCommit>=0  ? fmt(row[cCommit])   : '',
+          comments: cComment>=0 ? fmt(row[cComment])  : '',
+          services: cService>=0 ? fmt(row[cService])  : '',
+          automation:cAuto>=0   ? fmt(row[cAuto])     : '',
+        };
+
+        if(existIdx >= 0){
+          // Update existing — log each changed field
+          var f = FEATURES_DATA[existIdx];
+          ['qa','effort','preprod','committed','comments','services','automation'].forEach(function(field){
+            var oldV = f[field]||'';
+            var newV = newData[field]||'';
+            if(newV && oldV !== newV){
+              logChange(summary, field, oldV, newV);
+              f[field] = newV;
+              if(field==='effort') effortData[existIdx] = newV;
+            }
+          });
+          updated++;
+        } else {
+          // Add new feature
+          FEATURES_DATA.push(newData);
+          logChange(summary, 'Created', '—', summary);
+          added++;
+        }
+      });
+
+      localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+      status.textContent = '✓ '+added+' added, '+updated+' updated';
+      status.style.color = '#16a34a';
+      renderFeatures();
+    }catch(err){
+      status.textContent = 'Error: '+err.message;
+      status.style.color = '#dc2626';
+    }
+  };
+  if(file.name.endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+  e.target.value = '';
+}
+
+// ═══════════════ BUGS PER FEATURE ════════════════════════════════════════════
+function toggleBugs(idx){
+  var row = document.getElementById('bugs-row-'+idx);
+  if(!row) return;
+  var open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : 'table-row';
+  var btn = document.getElementById('bugs-btn-'+idx);
+  if(btn){
+    var notes = bugsData[idx]||'';
+    var hasNotes = notes.trim().length > 0;
+    btn.textContent = open
+      ? '▸ Notes'+(hasNotes?' ✎':'')
+      : '▾ Notes'+(hasNotes?' ✎':'');
+  }
+}
+
+function saveBugNotes(idx, val){
+  var old = bugsData[idx]||'';
+  if(old === val) return;
+  bugsData[idx] = val;
+  var feat = FEATURES_DATA[idx];
+  logChange(feat?feat.summary:'Feature '+idx, 'Testing Notes', old?'(had notes)':'(empty)', val?'(updated)':'(cleared)');
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  // Update button indicator without full re-render
+  var btn = document.getElementById('bugs-btn-'+idx);
+  if(btn){
+    var hasNotes = val.trim().length > 0;
+    btn.style.borderColor = hasNotes ? '#d97706' : '#9ca3af';
+    btn.style.color = hasNotes ? '#d97706' : '#9ca3af';
+    btn.style.background = hasNotes ? '#fffbeb' : '#f9fafb';
+  }
+}
+
+
+function sortFt(col){
+  if(ftSortCol===col) ftSortAsc=!ftSortAsc; else { ftSortCol=col; ftSortAsc=true; }
+  document.getElementById('s-preprod').textContent   = ftSortCol==='preprod'   ?(ftSortAsc?'↑':'↓'):'';
+  document.getElementById('s-committed').textContent = ftSortCol==='committed' ?(ftSortAsc?'↑':'↓'):'';
+  renderFeatures();
+}
+
+function saveEffort(idx, val){
+  effortData[idx] = val;
+  if(FEATURES_DATA[idx]) FEATURES_DATA[idx].effort = val;
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+}
+
+function toggleDeploy(idx){
+  deployedFeatures[idx] = !deployedFeatures[idx];
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  renderFeatures();
+}
+
+
+// ═══════════════ AUDIT LOG ════════════════════════════════════════════════════
+function saveIdentity(){
+  var val = document.getElementById('user-identity').value.trim();
+  localStorage.setItem('qa_user_identity', val);
+}
+function getIdentity(){
+  return localStorage.getItem('qa_user_identity') || document.getElementById('user-identity')?.value.trim() || 'Unknown';
+}
+
+function logChange(featureSummary, field, oldVal, newVal){
+  var entry = {
+    ts: new Date().toLocaleString(),
+    user: getIdentity(),
+    feature: featureSummary,
+    field: field,
+    oldVal: String(oldVal||'—'),
+    newVal: String(newVal||'—')
+  };
+  auditLog.unshift(entry);
+  if(auditLog.length > 500) auditLog.length = 500;
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+}
+
+function renderAudit(){
+  var tbody = document.getElementById('audit-tbody');
+  var empty = document.getElementById('audit-empty');
+  if(!auditLog.length){ tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  tbody.innerHTML = auditLog.map(function(e){
+    return '<tr style="border-bottom:1px solid #e5e7eb;">'
+      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-family:monospace;font-size:11.5px;color:#6b7280;white-space:nowrap;">'+e.ts+'</td>'
+      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12px;color:#2563eb;font-weight:600;white-space:nowrap;">'+escH(e.user||'—')+'</td>'
+      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12.5px;font-weight:500;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escH(e.feature)+'</td>'
+      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12px;color:#2563eb;font-weight:600;">'+escH(e.field)+'</td>'
+      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12px;color:#dc2626;max-width:180px;">'+escH(e.oldVal)+'</td>'
+      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12px;color:#16a34a;max-width:180px;">'+escH(e.newVal)+'</td>'
+      +'</tr>';
+  }).join('');
+}
+
+function clearAudit(){
+  auditLog = [];
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  renderAudit();
+}
+
+// ═══════════════ EXCEL UPSERT ════════════════════════════════════════════════
+function importCalendarExcel(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      var wb = XLSX.read(ev.target.result, {type: file.name.endsWith('.csv')?'string':'array'});
+      // Try MAY sheet first, fallback to first sheet
+      var sheetName = wb.SheetNames.includes('MAY') ? 'MAY' : wb.SheetNames[0];
+      var ws = wb.Sheets[sheetName];
+      var raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(raw.length < 2){ alert('Sheet appears empty'); return; }
+
+      // Build date map from header row
+      var dateRow = raw[0];
+      var dateMap = {};
+      dateRow.forEach(function(cell, i){
+        if(cell instanceof Date) dateMap[i] = cell.toISOString().substring(0,10);
+        else if(cell && String(cell).match(/[0-9]{4}-[0-9]{2}-[0-9]{2}/)) dateMap[i] = String(cell).substring(0,10);
+      });
+
+      var added = 0;
+      raw.slice(1).forEach(function(row){
+        var name = String(row[0]||'').trim();
+        if(!name) return;
+        var mid = 'm_'+name.toLowerCase().replace(/\s+/g,'_');
+        // Ensure member exists
+        if(!members.find(function(m){ return m.id===mid; })){
+          members.push({id:mid,name:name,color:'#64748b'});
+        }
+        if(!customSpans[mid]) customSpans[mid] = [];
+
+        // Build spans from consecutive same-value cells
+        var prev = {text:'',start:'',end:''};
+        Object.keys(dateMap).forEach(function(ci){
+          var ds = dateMap[ci];
+          var val = String(row[ci]||'').trim();
+          if(!val || val==='None') return;
+          if(val===prev.text && prev.end){
+            // Extend span
+            prev.end = ds;
+          } else {
+            if(prev.text && prev.start){
+              // Save previous span to customSpans
+              var tl = prev.text.toLowerCase();
+              var t = tl.includes('leave')?'leave':tl.includes('automat')||tl.includes('zauto')?'automation':tl.includes('zhire')||tl.includes('zbugs')||tl.includes('zcf')?'bug':'feature';
+              customSpans[mid].push({text:prev.text,type:t,start:prev.start,end:prev.end});
+              added++;
+            }
+            prev = {text:val, start:ds, end:ds};
+          }
+        });
+        if(prev.text && prev.start){
+          var tl = prev.text.toLowerCase();
+          var t = tl.includes('leave')?'leave':tl.includes('automat')||tl.includes('zauto')?'automation':tl.includes('zhire')||tl.includes('zbugs')||tl.includes('zcf')?'bug':'feature';
+          customSpans[mid].push({text:prev.text,type:t,start:prev.start,end:prev.end});
+          added++;
+        }
+      });
+
+      logChange('Calendar', 'Excel Import', '—', added+' spans imported from '+sheetName);
+      saveData();
+      render();
+      alert('✓ Imported '+added+' task spans from sheet "'+sheetName+'"');
+    }catch(err){
+      alert('Import error: '+err.message);
+    }
+  };
+  if(file.name.endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+  e.target.value='';
+}
+
+function upsertFromExcel(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  var status = document.getElementById('upsert-status');
+  status.textContent = 'Reading...';
+  status.style.color = '#6b7280';
+
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      var wb = XLSX.read(ev.target.result, {type: file.name.endsWith('.csv')?'string':'array'});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(rows.length < 2){ status.textContent='Empty sheet'; return; }
+
+      var headers = rows[0].map(function(h){ return String(h||'').trim().toLowerCase(); });
+      var col = function(name){ return headers.findIndex(function(h){ return h.includes(name); }); };
+
+      var cSum     = col('feature') >= 0 ? col('feature') : col('summary');
+      var cQA      = col('qa owner') >= 0 ? col('qa owner') : col('qa');
+      var cEffort  = col('effort');
+      var cPreprod = col('preprod');
+      var cCommit  = col('committed');
+      var cComment = col('comment');
+      var cService = col('service');
+      var cAuto    = col('automation');
+
+      if(cSum < 0){ status.textContent='No feature/summary column found'; status.style.color='#dc2626'; return; }
+
+      var added=0, updated=0;
+      rows.slice(1).forEach(function(row){
+        if(!row[cSum] || !String(row[cSum]).trim()) return;
+        var summary = String(row[cSum]).trim();
+
+        // Find existing feature by matching summary
+        var existIdx = FEATURES_DATA.findIndex(function(f){
+          return f.summary.toLowerCase().includes(summary.toLowerCase()) ||
+                 summary.toLowerCase().includes(f.summary.toLowerCase().substring(0,20));
+        });
+
+        function fmt(v){
+          if(!v || String(v).trim()==='') return '';
+          if(v instanceof Date) return v.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}).replace(/ /g,'-');
+          return String(v).trim();
+        }
+
+        var newData = {
+          summary: summary,
+          qa:       cQA>=0      ? fmt(row[cQA])      : '',
+          effort:   cEffort>=0  ? fmt(row[cEffort])   : '',
+          preprod:  cPreprod>=0 ? fmt(row[cPreprod])  : '',
+          committed:cCommit>=0  ? fmt(row[cCommit])   : '',
+          comments: cComment>=0 ? fmt(row[cComment])  : '',
+          services: cService>=0 ? fmt(row[cService])  : '',
+          automation:cAuto>=0   ? fmt(row[cAuto])     : '',
+        };
+
+        if(existIdx >= 0){
+          // Update existing — log each changed field
+          var f = FEATURES_DATA[existIdx];
+          ['qa','effort','preprod','committed','comments','services','automation'].forEach(function(field){
+            var oldV = f[field]||'';
+            var newV = newData[field]||'';
+            if(newV && oldV !== newV){
+              logChange(summary, field, oldV, newV);
+              f[field] = newV;
+              if(field==='effort') effortData[existIdx] = newV;
+            }
+          });
+          updated++;
+        } else {
+          // Add new feature
+          FEATURES_DATA.push(newData);
+          logChange(summary, 'Created', '—', summary);
+          added++;
+        }
+      });
+
+      localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+      status.textContent = '✓ '+added+' added, '+updated+' updated';
+      status.style.color = '#16a34a';
+      renderFeatures();
+    }catch(err){
+      status.textContent = 'Error: '+err.message;
+      status.style.color = '#dc2626';
+    }
+  };
+  if(file.name.endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+  e.target.value = '';
+}
+
+// ═══════════════ BUGS PER FEATURE ════════════════════════════════════════════
+function toggleBugs(idx){
+  var el = document.getElementById('bugs-row-'+idx);
+  if(!el) return;
+  var isHidden = el.style.display === 'none';
+  el.style.display = isHidden ? 'table-row' : 'none';
+  var btn = document.getElementById('bugs-btn-'+idx);
+  if(btn) btn.textContent = isHidden ? '▾ Bugs ('+(bugsData[idx]||[]).length+')' : '▸ Bugs ('+(bugsData[idx]||[]).length+')';
+}
+
+function addBug(idx){
+  var idEl  = document.getElementById('new-bug-id-'+idx);
+  var sumEl = document.getElementById('new-bug-sum-'+idx);
+  var sevEl = document.getElementById('new-bug-sev-'+idx);
+  if(!idEl||!sumEl) return;
+  var bugId  = idEl.value.trim();
+  var bugSum = sumEl.value.trim();
+  var bugSev = sevEl ? sevEl.value : 'P2';
+  if(!bugId && !bugSum) return;
+  if(!bugsData[idx]) bugsData[idx] = [];
+  var newBug = {id:bugId, summary:bugSum, severity:bugSev, status:'Open', ts:new Date().toLocaleDateString()};
+  bugsData[idx].push(newBug);
+  var feat = FEATURES_DATA[idx];
+  logChange(feat?feat.summary:'Feature '+idx, 'Bug Added', '—', (bugId?bugId+': ':'')+bugSum);
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  renderFeatures();
+  setTimeout(function(){ toggleBugs(idx); }, 50);
+}
+
+function deleteBug(featIdx, bugIdx){
+  if(!bugsData[featIdx]) return;
+  var bug = bugsData[featIdx][bugIdx];
+  var feat = FEATURES_DATA[featIdx];
+  logChange(feat?feat.summary:'Feature '+featIdx, 'Bug Removed', (bug.id?bug.id+': ':'')+bug.summary, '—');
+  bugsData[featIdx].splice(bugIdx, 1);
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  renderFeatures();
+}
+
+function toggleBugStatus(featIdx, bugIdx){
+  if(!bugsData[featIdx]||!bugsData[featIdx][bugIdx]) return;
+  var bug = bugsData[featIdx][bugIdx];
+  var oldSt = bug.status;
+  var cycle = ['Open','In Progress','Fixed','Closed'];
+  bug.status = cycle[(cycle.indexOf(oldSt)+1)%cycle.length];
+  var feat = FEATURES_DATA[featIdx];
+  logChange(feat?feat.summary:'Feature '+featIdx, 'Bug Status: '+(bug.id||bug.summary.substring(0,20)), oldSt, bug.status);
+  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, auditLog, bugsData}));
+  renderFeatures();
+  setTimeout(function(){ toggleBugs(featIdx); }, 50);
+}
+
+// ─── Link helpers ────────────────────────────────────────────────────────────
+function linkifyTickets(text){
+  if(!text) return '';
+  return String(text).replace(/(Z[A-Z]+-\d+)/g, function(id){
+    return '<a href="https://infoedge.atlassian.net/browse/'+id+'" target="_blank" '
+      +'style="color:var(--teal);font-family:var(--mono);font-size:11px;text-decoration:none;font-weight:600;">'+id+'</a>';
+  });
+}
+
+function autoLinks(text){
+  if(!text||text.trim()===''||text==='—') return '<span style="color:#9ca3af;">—</span>';
+  var ids=[], re=/Z[A-Z]+-\d+/g, m;
+  while((m=re.exec(text))!==null) ids.push(m[0]);
+  if(!ids.length) return '<span style="font-size:12px;color:#6b7280;">'+escH(text.substring(0,30))+'</span>';
+  return ids.map(function(id){
+    return '<a href="https://infoedge.atlassian.net/browse/'+id+'" target="_blank" '
+      +'style="display:inline-block;font-family:var(--mono);font-size:11.5px;font-weight:600;color:#0891b2;'
+      +'text-decoration:none;background:#f0faff;border:1px solid #bae6fd;padding:2px 7px;border-radius:3px;margin:1px 2px 1px 0;white-space:nowrap;">'+id+'</a>';
+  }).join(' ');
+}
+
+
+function renderFeatures(){
+  var today = new Date(); today.setHours(0,0,0,0);
+
+  // Parse date for sorting - handles dd-Mon-YYYY or similar
+  function parseD(s){
+    if(!s||s==='—'||s==='Pending') return new Date('2099-01-01');
+    var d = new Date(s);
+    return isNaN(d)?new Date('2099-01-01'):d;
+  }
+
+  var sorted = FEATURES_DATA.slice().sort(function(a,b){
+    var da = parseD(ftSortCol==='preprod'?a.preprod:a.committed);
+    var db = parseD(ftSortCol==='preprod'?b.preprod:b.committed);
+    return ftSortAsc?da-db:db-da;
+  });
+
+  document.getElementById('s-preprod').textContent   = ftSortCol==='preprod'   ?(ftSortAsc?'↑':'↓'):'';
+  document.getElementById('s-committed').textContent = ftSortCol==='committed' ?(ftSortAsc?'↑':'↓'):'';
+
+  var html = '';
+  sorted.forEach(function(f, si){
+    var origIdx = FEATURES_DATA.indexOf(f);
+    if(origIdx<0) origIdx = si;
+    var isDeployed = !!deployedFeatures[origIdx];
+    var rowBg = isDeployed?'background:#f0fdf4;':'';
+
+    var m = f.summary.match(/^(Z[A-Z]+-\d+|\[Z[A-Z]+-\d+\])/);
+    var ticket = m?m[0].replace(/[\[\]]/g,''):'';
+    var title  = ticket?f.summary.replace(m[0],'').replace(/^[:\s-]+/,'').trim():f.summary;
+    var ticketHtml = ticket
+      ? '<a href="https://infoedge.atlassian.net/browse/'+ticket+'" target="_blank" class="ft-ticket" style="text-decoration:none;">'+escH(ticket)+'</a>'
+      : '';
+
+    var deployBtn = '<button class="deploy-btn'+(isDeployed?' deployed':'')+'" onclick="toggleDeploy('+origIdx+')">'+(isDeployed?'✓ Deployed':'Mark Deployed')+'</button>';
+
+    var notes = bugsData[origIdx]||'';
+    var hasNotes = notes.trim().length > 0;
+    var bugBtnColor = hasNotes?'#d97706':'#9ca3af';
+    var bugBtnBg = hasNotes?'#fffbeb':'#f9fafb';
+    var bugBtn = '<button id="bugs-btn-'+origIdx+'" onclick="toggleBugs('+origIdx+')" '
+      +'style="padding:4px 11px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid '+bugBtnColor+';background:'+bugBtnBg+';color:'+bugBtnColor+';font-family:var(--mono);">'
+      +'▸ Notes'+(hasNotes?' ✎':'')+'</button>';
+
+    // Main feature row
+    html += '<tr style="'+rowBg+'">'
+      +'<td style="min-width:280px;'+(isDeployed?'background:#f0fdf4;':'')+'">'+ticketHtml+'<div class="ft-summary">'+escH((title||f.summary).substring(0,100))+'</div></td>'
+      +'<td style="font-size:13px;'+(isDeployed?'background:#f0fdf4;':'')+'">'+linkifyTickets(escH(f.qa||'—'))+'</td>'
+      +'<td contenteditable="true" style="font-size:13px;'+(isDeployed?'background:#f0fdf4;':'')+'" onblur="onEffortBlur('+origIdx+',this)" id="effort-'+origIdx+'">'+escH(f.effort||'')+'</td>'
+      +'<td style="'+(isDeployed?'background:#f0fdf4;':'')+'"><span style="font-size:13px;">'+escH(f.preprod||'—')+'</span></td>'
+      +'<td style="'+(isDeployed?'background:#f0fdf4;':'')+'"><span style="font-size:13px;">'+escH(f.committed||'—')+'</span></td>'
+      +'<td style="font-size:13px;color:#374151;'+(isDeployed?'background:#f0fdf4;':'')+'">'+escH((f.comments||'').substring(0,80))+'</td>'
+      +'<td style="font-size:12px;color:#374151;'+(isDeployed?'background:#f0fdf4;':'')+'">'+escH((f.services||'—').substring(0,40))+'</td>'
+      +'<td style="'+(isDeployed?'background:#f0fdf4;':'')+'">'+autoLinks(f.automation||'')+'</td>'
+      +'<td style="'+(isDeployed?'background:#f0fdf4;':'')+'">'+bugBtn+'</td>'
+      +'<td style="'+(isDeployed?'background:#f0fdf4;':'')+'">'+deployBtn+'</td>'
+      +'</tr>';
+
+    // Expandable testing notes row
+    var notes = bugsData[origIdx]||'';
+    html += '<tr id="bugs-row-'+origIdx+'" style="display:none;background:#fffdf7;">'
+      +'<td colspan="10" style="padding:14px 18px;border-bottom:2px solid #fde68a;">'
+        +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+          +'<span style="font-size:12px;font-weight:700;color:#92400e;font-family:var(--mono);">📝 TESTING NOTES / ISSUES OBSERVED</span>'
+          +'<span style="font-size:11px;color:#b45309;">(preprod observations, workarounds, deferred items)</span>'
+        +'</div>'
+        +'<textarea id="notes-'+origIdx+'" rows="5" '
+          +'style="width:100%;padding:10px 12px;border:1.5px solid #fcd34d;border-radius:6px;font-size:13px;font-family:var(--sans);line-height:1.6;resize:vertical;outline:none;background:#fffbeb;color:#1c1917;" '
+          +'placeholder="Bullet points (Issue 1 / Workaround / Deferred...)" '
+          +'onblur="saveBugNotes('+origIdx+',this.value)">'+escH(notes)+'</textarea>'
+        +'<div style="display:flex;justify-content:flex-end;margin-top:6px;">'
+          +'<span style="font-size:11px;color:#b45309;font-style:italic;">Auto-saved on blur</span>'
+        +'</div>'
+      +'</td></tr>';
+  });
+  document.getElementById('ft-body').innerHTML = html;
+}
+
+
+// ═══════════════════════ EXPORT ══════════════════════════════════════════════
+function exportCSV(){
+  var dates=getDates(), rows=[['Member','Date','Day','Task','Type']];
+  members.forEach(function(m){
+    dates.forEach(function(d){
+      var dateStr=ds(d);
+      var allSpans=(MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]);
+      var active=allSpans.filter(function(s){ return s.start<=dateStr&&s.end>=dateStr; });
+      if(active.length){ active.forEach(function(s){ rows.push([m.name,dateStr,DAYS[d.getDay()],s.text,s.type]); }); }
+      else rows.push([m.name,dateStr,DAYS[d.getDay()],'','']);
+    });
+  });
+  var csv=rows.map(function(r){ return r.map(function(c){ return '"'+String(c).replace(/"/g,'""')+'"'; }).join(','); }).join('\n');
+  var a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='qa_tracker_'+ds(weekStart)+'.csv'; a.click();
+}
+
+
+init();
+</script>
+</body>
+</html>
