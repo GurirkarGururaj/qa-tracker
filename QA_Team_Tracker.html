@@ -753,7 +753,15 @@ function init(){
         Object.keys(commentsData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].comments=commentsData[k]; });
       }
       if(s.auditLog) auditLog = s.auditLog;
-      if(s.bugsData) bugsData = s.bugsData;
+      if(s.bugsData){
+        bugsData = s.bugsData;
+        // Convert legacy array format to string
+        Object.keys(bugsData).forEach(function(k){
+          if(Array.isArray(bugsData[k])){
+            bugsData[k] = bugsData[k].map(function(b){ return (b.id||'')+(b.summary?' - '+b.summary:''); }).join('\n');
+          }
+        });
+      }
     }catch(e){}
   }
   // Start at May 1 2026
@@ -1953,7 +1961,9 @@ function renderFeatures(){
     var deployBtn = '<button class="deploy-btn'+(isDeployed?' deployed':'')+'" onclick="toggleDeploy('+origIdx+')">'+(isDeployed?'✓ Deployed':'Mark Deployed')+'</button>';
 
     var notes = bugsData[origIdx]||'';
-    var hasNotes = notes.trim().length > 0;
+    // Handle legacy array format from old localStorage
+    if(Array.isArray(notes)) notes = notes.map(function(b){ return (b.id||'')+(b.summary?' - '+b.summary:''); }).join('\n');
+    var hasNotes = String(notes).trim().length > 0;
     var bugBtnColor = hasNotes?'#d97706':'#9ca3af';
     var bugBtnBg = hasNotes?'#fffbeb':'#f9fafb';
     var bugBtn = '<button id="bugs-btn-'+origIdx+'" onclick="toggleBugs('+origIdx+')" '
@@ -1977,7 +1987,8 @@ function renderFeatures(){
 
     // Expandable testing notes row
     var notes = bugsData[origIdx]||'';
-    html += '<tr id="bugs-row-'+origIdx+'" style="display:none;background:#fffdf7;">'
+    if(Array.isArray(notes)) notes = notes.map(function(b){ return (b.id||'')+(b.summary?' - '+b.summary:''); }).join('\n');
+    notes = String(notes);
       +'<td colspan="10" style="padding:14px 18px;border-bottom:2px solid #fde68a;">'
         +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
           +'<span style="font-size:12px;font-weight:700;color:#92400e;font-family:var(--mono);">📝 TESTING NOTES / ISSUES OBSERVED</span>'
