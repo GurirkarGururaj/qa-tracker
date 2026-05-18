@@ -273,7 +273,13 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
 
 <!-- FEATURES VIEW -->
 <div id="features-view">
-
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--border);background:#f8fafc;">
+    <label style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;background:#0ea5e9;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);">
+      ↑ Import from Excel
+      <input type="file" id="feat-excel-upload" accept=".xlsx,.xls,.csv" style="display:none" onchange="upsertFromExcel(event)"/>
+    </label>
+    <span id="upsert-status" style="font-size:12px;font-family:var(--mono);color:#6b7280;"></span>
+  </div>
   <div class="ft-wrap">
     <table class="ft">
       <thead>
@@ -1870,111 +1876,6 @@ function clearAudit(){
 }
 
 // ═══════════════ EXCEL UPSERT ════════════════════════════════════════════════
-function upsertFromExcel(e){
-  var file = e.target.files[0];
-  if(!file) return;
-  var status = document.getElementById('upsert-status');
-  status.textContent = 'Reading...';
-  status.style.color = '#6b7280';
-
-  var reader = new FileReader();
-  reader.onload = function(ev){
-    try{
-      var wb = XLSX.read(ev.target.result, {type: file.name.endsWith('.csv')?'string':'array', cellDates:true});
-      var featSheetName = wb.SheetNames.find(function(n){ var nl=n.toLowerCase(); return nl.includes('feature')||nl.includes('committed')||nl.includes('wbs'); }) || wb.SheetNames[wb.SheetNames.length-1];
-      var ws = wb.Sheets[featSheetName];
-      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
-      if(rows.length < 2){ status.textContent='Empty sheet in '+featSheetName; return; }
-
-      var headers = rows[0].map(function(h){ return String(h||'').trim().toLowerCase(); });
-      var col = function(name){ return headers.findIndex(function(h){ return h.includes(name); }); };
-
-      var cSum     = col('feature') >= 0 ? col('feature') : col('summary');
-      var cQA      = col('qa owner') >= 0 ? col('qa owner') : col('qa');
-      var cEffort  = col('effort');
-      var cPreprod = col('preprod');
-      var cCommit  = col('committed');
-      var cComment = col('comment');
-      var cService = col('service');
-      var cAuto    = col('automation');
-
-      if(cSum < 0){ status.textContent='No feature/summary column found'; status.style.color='#dc2626'; return; }
-
-      var added=0, updated=0;
-      rows.slice(1).forEach(function(row){
-        if(!row[cSum] || !String(row[cSum]).trim()) return;
-        var summary = String(row[cSum]).trim();
-
-        // Find existing feature — match by ticket ID first, then exact/near summary
-        var summaryLc = summary.toLowerCase();
-        // Extract ticket ID (e.g. ZCF-2002, ZHIRE-3078) from the Excel row
-        var ticketMatch = summary.match(/[A-Z]+-\d+/i);
-        var ticketId = ticketMatch ? ticketMatch[0].toUpperCase() : null;
-
-        var existIdx = FEATURES_DATA.findIndex(function(f){
-          var fLc = (f.summary||'').toLowerCase();
-          // 1. Match by ticket ID (most reliable)
-          if(ticketId && fLc.includes(ticketId.toLowerCase())) return true;
-          // 2. Exact match
-          if(fLc === summaryLc) return true;
-          // 3. One contains the other (only if summary is >15 chars to avoid false matches)
-          if(summary.length > 15 && fLc.includes(summaryLc.substring(0,25))) return true;
-          if(summary.length > 15 && summaryLc.includes(fLc.substring(0,25))) return true;
-          return false;
-        });
-
-        function fmt(v){
-          if(!v || String(v).trim()==='') return '';
-          if(v instanceof Date) return v.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}).replace(/ /g,'-');
-          return String(v).trim();
-        }
-
-        var newData = {
-          summary: summary,
-          qa:       cQA>=0      ? fmt(row[cQA])      : '',
-          effort:   cEffort>=0  ? fmt(row[cEffort])   : '',
-          preprod:  cPreprod>=0 ? fmt(row[cPreprod])  : '',
-          committed:cCommit>=0  ? fmt(row[cCommit])   : '',
-          comments: cComment>=0 ? fmt(row[cComment])  : '',
-          services: cService>=0 ? fmt(row[cService])  : '',
-          automation:cAuto>=0   ? fmt(row[cAuto])     : '',
-        };
-
-        if(existIdx >= 0){
-          // UPDATE existing — only overwrite Excel-sourced fields (qa, preprod, committed, services, automation)
-          // NEVER touch: deployed, notes, comments, effort — these are tool-entered
-          var f = FEATURES_DATA[existIdx];
-          ['qa','preprod','committed','services','automation'].forEach(function(field){
-            var oldV = f[field]||'';
-            var newV = newData[field]||'';
-            if(newV && newV !== oldV){
-              logChange(summary, field+' (Excel)', oldV, newV);
-              f[field] = newV;
-            }
-          });
-          if(summary.length > (f.summary||'').length) f.summary = summary;
-          updated++;
-        } else {
-          // Add new feature
-          FEATURES_DATA.push(newData);
-          logChange(summary, 'Created', '—', summary);
-          added++;
-        }
-      });
-
-      localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
-      status.textContent = '✓ '+added+' added, '+updated+' updated';
-      status.style.color = '#16a34a';
-      renderFeatures();
-    }catch(err){
-      status.textContent = 'Error: '+err.message;
-      status.style.color = '#dc2626';
-    }
-  };
-  if(file.name.endsWith('.csv')) reader.readAsText(file);
-  else reader.readAsArrayBuffer(file);
-  e.target.value = '';
-}
 
 // ═══════════════ BUGS PER FEATURE ════════════════════════════════════════════
 function toggleBugs(idx){
