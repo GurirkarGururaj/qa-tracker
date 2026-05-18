@@ -218,11 +218,11 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
     <button class="main-tab" id="tab-audit" onclick="switchTab('audit')">📝 Audit Log</button>
   </div>
   <div class="topbar-right">
-    <div id="user-id-wrap" style="display:flex;align-items:center;gap:5px;">
+    <div id="user-id-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer;" onclick="promptIdentity(true)" title="Click to change your name">
       <span style="font-size:10px;color:rgba(255,255,255,.35);font-family:var(--mono);">You:</span>
       <input id="user-identity" type="text" placeholder="your name"
-        style="width:88px;padding:3px 7px;border:1px solid rgba(255,255,255,.15);border-radius:5px;font-size:11px;font-family:var(--mono);outline:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.9);cursor:pointer;"
-        title="Click to change your name" oninput="saveIdentity()" value=""/>
+        style="width:88px;padding:3px 7px;border:1px solid rgba(255,255,255,.15);border-radius:5px;font-size:11px;font-family:var(--mono);outline:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.9);cursor:pointer;pointer-events:none;"
+        title="Click to change your name" oninput="saveIdentity()" value="" readonly/>
     </div>
     <div id="week-nav-sep" style="width:1px;height:18px;background:rgba(255,255,255,.12);margin:0 2px;"></div>
     <div class="week-nav" id="week-nav" style="display:flex;align-items:center;gap:3px;">
@@ -391,11 +391,18 @@ var effortData = {}; // key: feature index → effort string
 var commentsData = {}; // key: feature index → comments string
 
 // ── Role config — add manager emails/names here ───────────────────
-var MANAGERS = ['gururaj.gurikar', 'gururaj gurikar', 'gururaj'];  // lowercase match
+var MANAGERS = ['gururaj.gurikar', 'gururaj gurikar', 'gururaj'];  // lowercase — add manager names here
 
 function isManager(){
   var id = (localStorage.getItem('qa_user_identity') || '').toLowerCase().trim();
-  return MANAGERS.some(function(m){ return id === m || id.startsWith(m) || m.startsWith(id.split(' ')[0]); });
+  if(!id) return false;
+  return MANAGERS.some(function(m){
+    return id === m
+      || id.startsWith(m)
+      || m.startsWith(id)
+      || id.split(' ')[0] === m.split(' ')[0]
+      || id.split('.')[0] === m.split('.')[0];
+  });
 }
 var currentTab = 'calendar';
 
@@ -450,9 +457,9 @@ function gasGet(action, params){
 }
 
 // Show config banner if GAS not set up yet
-function promptIdentity(){
-  // Don't show if already set
-  if(localStorage.getItem('qa_user_identity')) return;
+function promptIdentity(forceShow){
+  // Don't show if already set, unless forced
+  if(localStorage.getItem('qa_user_identity') && !forceShow) return;
 
   var overlay = document.createElement('div');
   overlay.id = 'identity-overlay';
