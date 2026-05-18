@@ -718,10 +718,20 @@ function pushSequential(action, key, records){
 }
 
 function pushAllToGas(){
-  // Push members (small — bulk is fine)
   var p1 = gasCall('saveMembers', {members: members});
 
-  // Push spans one at a time
+  // Features — ONE bulk call
+  var allFeats = FEATURES_DATA.map(function(f, i){
+    return {
+      id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:effortData[i]||f.effort||'',
+      preprod:f.preprod||'', committed:f.committed||'', comments:commentsData[i]||f.comments||'',
+      services:f.services||'', automation:f.automation||'',
+      deployed:deployedFeatures[i]?'1':'', notes:bugsData[i]||''
+    };
+  });
+  var p2 = gasCall('saveFeatures', {features: allFeats});
+
+  // Spans — chunks of 20 in parallel
   var allSpans = [];
   members.forEach(function(m){
     var spans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]);
@@ -729,22 +739,13 @@ function pushAllToGas(){
       if((s.text||'').trim()) allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
     });
   });
+  var CHUNK = 20, spanPromises = [];
+  for(var i = 0; i < allSpans.length; i += CHUNK){
+    spanPromises.push(gasCall('saveSpans', {spans: allSpans.slice(i, i+CHUNK)}));
+  }
+  var p3 = Promise.all(spanPromises);
 
-  // Push features one at a time
-  var allFeats = FEATURES_DATA.map(function(f, i){
-    return {
-      id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:f.effort||'',
-      preprod:f.preprod||'', committed:f.committed||'', comments:f.comments||'',
-      services:f.services||'', automation:f.automation||'',
-      deployed:deployedFeatures[i]?'1':'', notes:bugsData[i]||''
-    };
-  });
-
-  return p1.then(function(){
-    return pushSequential('saveSpan', 'span', allSpans);
-  }).then(function(){
-    return pushSequential('saveFeature', 'feature', allFeats);
-  }).then(function(){
+  return Promise.all([p1, p2, p3]).then(function(){
     console.log('pushAllToGas complete: '+allSpans.length+' spans, '+allFeats.length+' features');
   });
 }
@@ -1639,7 +1640,8 @@ function upsertFromExcel(e){
       var cService = col('service');
       var cAuto    = col('automation');
 
-      if(cSum < 0){ status.textContent='No feature/summary column found'; status.style.color='#dc2626'; return; }
+      if(cSum < 0){ status.textContent='No feature/summary column found. Headers found: '+headers.slice(0,5).join(', '); status.style.color='#dc2626'; return; }
+      status.textContent = 'Headers: col A='+headers[0]+' | Summary col='+cSum+' | QA col='+cQA;
 
       var added=0, updated=0;
       rows.slice(1).forEach(function(row){
@@ -1707,22 +1709,18 @@ function upsertFromExcel(e){
       status.textContent = '✓ '+added+' added, '+updated+' updated — syncing to Google Sheets...';
       status.style.color = '#d97706';
       renderFeatures();
-      // Push ALL features to GAS so new rows persist on reload
+      // Push ALL features to GAS in ONE bulk call
       if(GAS_URL){
-        var pushCount = 0;
-        FEATURES_DATA.forEach(function(f, i){
-          gasCall('saveFeature', {feature:{
-            id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:effortData[i]||f.effort||'',
+        var allFeats = FEATURES_DATA.map(function(f, i){
+          return {id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:effortData[i]||f.effort||'',
             preprod:f.preprod||'', committed:f.committed||'', comments:commentsData[i]||f.comments||'',
             services:f.services||'', automation:f.automation||'',
-            deployed:deployedFeatures[i]?'1':'', notes:bugsData[i]||''
-          }});
-          pushCount++;
+            deployed:deployedFeatures[i]?'1':'', notes:bugsData[i]||''};
         });
-        setTimeout(function(){
-          status.textContent = '✓ '+added+' added, '+updated+' updated ('+pushCount+' rows synced to Sheets)';
+        gasCall('saveFeatures', {features: allFeats}).then(function(){
+          status.textContent = '✓ '+added+' added, '+updated+' updated (synced to Sheets)';
           status.style.color = '#16a34a';
-        }, 3000);
+        });
       } else {
         status.textContent = '✓ '+added+' added, '+updated+' updated';
         status.style.color = '#16a34a';
