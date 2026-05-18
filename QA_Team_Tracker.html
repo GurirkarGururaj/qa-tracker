@@ -726,7 +726,7 @@ function pushSequential(action, key, records){
 function pushAllToGas(){
   var p1 = gasCall('saveMembers', {members: members});
 
-  // Features — chunked into groups of 5 (JSONP URL limit)
+  // Features — one at a time (most reliable, guaranteed to fit in URL)
   var allFeats = FEATURES_DATA.map(function(f, i){
     return {
       id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:effortData[i]||f.effort||'',
@@ -734,12 +734,12 @@ function pushAllToGas(){
       services:f.services||'', automation:f.automation||'',
       deployed:deployedFeatures[i]?'1':'', notes:bugsData[i]||''
     };
-  }).filter(function(f){ return f.summary.trim(); });
-  var FCHUNK = 5, featPromises = [];
-  for(var fi = 0; fi < allFeats.length; fi += FCHUNK){
-    featPromises.push(gasCall('saveFeatures', {features: allFeats.slice(fi, fi+FCHUNK)}));
-  }
-  var p2 = Promise.all(featPromises);
+  }).filter(function(f){ return (f.summary||'').trim(); });
+  var featChain = Promise.resolve();
+  allFeats.forEach(function(feat){
+    featChain = featChain.then(function(){ return gasCall('saveFeature', {feature: feat}); });
+  });
+  var p2 = featChain;
 
   // Spans — chunks of 20 in parallel
   var allSpans = [];
@@ -837,6 +837,7 @@ function init(){
 
   // Then fetch fresh data from Google Sheets (if connected)
   if(GAS_URL){
+    if(window._importInProgress){ showSyncStatus('Import in progress, skipping GAS reload'); return; }
     showSyncStatus('🔄 Loading from Google Sheets…');
     gasGet('loadAll', {}).then(function(data){
       if(!data || data.error){ showSyncStatus('⚠ Could not reach Google Sheets'); return; }
@@ -1732,12 +1733,14 @@ function upsertFromExcel(e){
             deployed:deployedFeatures[realIdx]?'1':'', notes:bugsData[realIdx]||''};
         });
         // Send in chunks of 5 to stay within JSONP URL limit
-        var FCHUNK = 5, chain = Promise.resolve();
-        for(var fi = 0; fi < allFeats.length; fi += FCHUNK){
-          (function(chunk){ chain = chain.then(function(){ return gasCall('saveFeatures', {features: chunk}); }); })(allFeats.slice(fi, fi+FCHUNK));
-        }
-        chain.then(function(){
-          status.textContent = '✓ '+added+' added, '+updated+' updated (synced to Sheets)';
+        window._importInProgress = true;
+        var featChain2 = Promise.resolve();
+        allFeats.forEach(function(feat){
+          featChain2 = featChain2.then(function(){ return gasCall('saveFeature', {feature: feat}); });
+        });
+        featChain2.then(function(){
+          window._importInProgress = false;
+          status.textContent = '✓ '+added+' added, '+updated+' updated — saved to Google Sheets';
           status.style.color = '#16a34a';
         });
       } else {
