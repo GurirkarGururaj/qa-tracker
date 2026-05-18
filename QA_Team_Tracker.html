@@ -292,6 +292,11 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
       </thead>
       <tbody id="ft-body"></tbody>
     </table>
+    <div style="padding:12px 20px;">
+      <button onclick="addFeatureRow()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:6px;border:1.5px dashed #94a3b8;background:#f8fafc;color:#475569;font-size:13px;font-family:var(--sans);font-weight:500;cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor='var(--teal)';this.style.color='var(--teal)';this.style.background='#f0fdfa'" onmouseout="this.style.borderColor='#94a3b8';this.style.color='#475569';this.style.background='#f8fafc'">
+        + Add Feature Row
+      </button>
+    </div>
   </div>
 </div>
 
@@ -827,30 +832,43 @@ function init(){
         members = data.members;
       }
 
-      // Spans — merge from GAS into customSpans (don't overwrite, merge)
+      // Spans — full replace from GAS (source of truth)
       if(data.spans && data.spans.length){
+        // Keep local-only spans (not yet in GAS) before wiping
+        var gasSpanKeys = {};
+        data.spans.forEach(function(s){ if(s.id) gasSpanKeys[s.id] = true; });
+
+        // Rebuild customSpans entirely from GAS
+        var newCustomSpans = {};
         data.spans.forEach(function(s){
           var mid = s.memberId;
           if(!mid) return;
           if(s.id === 'test123' || mid === 'm_test') return;
-          // Skip spans with no text
           var text = (s.text||'').trim();
           if(!text) return;
-          if(!customSpans[mid]) customSpans[mid] = [];
-          // Skip seeded spans
           var seeded = (MEMBER_SPANS[mid]||[]).some(function(ms){
             return ms.text===text && ms.start===s.start;
           });
           if(seeded) return;
-          // Only add if not already in customSpans
-          var exists = customSpans[mid].some(function(cs){
-            return cs.text===text && cs.start===s.start;
-          });
-          if(!exists){
-            customSpans[mid].push({text:text, type:s.type||'feature', start:s.start, end:s.end||s.start});
-          }
+          if(!newCustomSpans[mid]) newCustomSpans[mid] = [];
+          newCustomSpans[mid].push({text:text, type:s.type||'feature', start:s.start, end:s.end||s.start});
         });
-        console.log('Merged spans from GAS:', data.spans.length);
+
+        // Also keep any local spans that haven't been pushed to GAS yet
+        Object.keys(customSpans).forEach(function(mid){
+          (customSpans[mid]||[]).forEach(function(cs){
+            var id = spanId(mid, cs);
+            if(!gasSpanKeys[id]){
+              // This span is local-only, keep it
+              if(!newCustomSpans[mid]) newCustomSpans[mid] = [];
+              var alreadyThere = newCustomSpans[mid].some(function(s){ return s.text===cs.text && s.start===cs.start; });
+              if(!alreadyThere) newCustomSpans[mid].push(cs);
+            }
+          });
+        });
+
+        customSpans = newCustomSpans;
+        console.log('Loaded spans from GAS:', data.spans.length);
       }
 
       // Features — reset deployed status first, then load from GAS
@@ -1235,6 +1253,23 @@ function switchTab(tab){
 }
 
 // ═══════════════════════ FEATURES TABLE ══════════════════════════════════════
+function addFeatureRow(){
+  var newRow = {summary:'', qa:'', effort:'', preprod:'', committed:'', comments:'', services:'', automation:'—'};
+  FEATURES_DATA.push(newRow);
+  var idx = FEATURES_DATA.length - 1;
+  if(GAS_URL){
+    gasCall('saveFeature', {feature:{
+      id:'feat_'+idx, summary:'', qa:'', effort:'', preprod:'', committed:'',
+      comments:'', services:'', automation:'—', deployed:'', notes:''
+    }});
+  }
+  renderFeatures();
+  setTimeout(function(){
+    var cell = document.getElementById('summary-'+idx);
+    if(cell){ cell.scrollIntoView({behavior:'smooth', block:'center'}); cell.focus(); }
+  }, 100);
+}
+
 function sortFt(col){
   if(ftSortCol===col) ftSortAsc=!ftSortAsc; else { ftSortCol=col; ftSortAsc=true; }
   document.getElementById('s-preprod').textContent   = ftSortCol==='preprod'   ?(ftSortAsc?'↑':'↓'):'';
