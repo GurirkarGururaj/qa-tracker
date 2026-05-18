@@ -1720,7 +1720,9 @@ function upsertFromExcel(e){
       });
 
       localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
-      status.textContent = '✓ '+added+' added, '+updated+' updated — syncing to Google Sheets...';
+      // Debug: show last 3 features
+      var last3 = FEATURES_DATA.slice(-3).map(function(f){ return f.summary; }).join(' | ');
+      status.textContent = '✓ '+added+' added, '+updated+' updated | Last 3: '+last3;
       status.style.color = '#d97706';
       renderFeatures();
       // Push ALL features to GAS in ONE bulk call
