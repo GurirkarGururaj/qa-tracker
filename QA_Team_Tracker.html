@@ -810,7 +810,8 @@ function init(){
         var cleaned = {};
         Object.keys(s.customSpans).forEach(function(mid){
           cleaned[mid] = (s.customSpans[mid]||[]).filter(function(cs){
-            return !(MEMBER_SPANS[mid]||[]).some(function(ms){ return ms.text===cs.text; });
+            function n(t){ return String(t||'').replace(/\s+/g,' ').trim(); }
+            return !(MEMBER_SPANS[mid]||[]).some(function(ms){ return n(ms.text)===n(cs.text); });
           });
         });
         customSpans = cleaned;
@@ -912,10 +913,10 @@ function init(){
           if(s.id === 'test123' || mid === 'm_test') return;
           var text = (s.text||'').trim();
           if(!text) return;
-          // Filter out any span whose text matches a seeded span (regardless of dates)
-          // This cleans up old GAS data that duplicates seeded spans
+          // Filter out any span whose text matches a seeded span (normalized comparison)
+          function normT(t){ return String(t||'').replace(/\s+/g,' ').trim(); }
           var seeded = (MEMBER_SPANS[mid]||[]).some(function(ms){
-            return ms.text===text;
+            return normT(ms.text)===normT(text);
           });
           if(seeded) return;
           if(!newCustomSpans[mid]) newCustomSpans[mid] = [];
@@ -1768,14 +1769,17 @@ function importCalendarExcel(e){
         // Upsert each span
         spans.forEach(function(span){
           var type = getType(span.text);
-          // Already in seeded data? Skip
+          // Normalize text for comparison (collapse whitespace, newlines)
+          function normText(t){ return String(t||'').replace(/\s+/g,' ').trim(); }
+          var normSpan = normText(span.text);
+          // Already in seeded data? Skip (match by normalized text only — dates may differ)
           var inSeeded = seededSpans.some(function(s){
-            return s.text === span.text && s.start === span.start;
+            return normText(s.text) === normSpan;
           });
           if(inSeeded){ skipped++; return; }
           // Already in customSpans?
           var existIdx = customSpans[mid].findIndex(function(s){
-            return s.text === span.text && s.start === span.start;
+            return normText(s.text) === normSpan && s.start === span.start;
           });
           if(existIdx >= 0){
             if(customSpans[mid][existIdx].end !== span.end){
