@@ -732,7 +732,7 @@ function pushSequential(action, key, records){
 function pushAllToGas(){
   var p1 = gasCall('saveMembers', {members: members});
 
-  // Features — one at a time (most reliable, guaranteed to fit in URL)
+  // Features — clear and rewrite to prevent duplicates
   var allFeats = FEATURES_DATA.map(function(f, i){
     return {
       id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:effortData[i]||f.effort||'',
@@ -741,13 +741,20 @@ function pushAllToGas(){
       deployed:deployedFeatures[i]?'1':'', notes:bugsData[i]||''
     };
   }).filter(function(f){ return (f.summary||'').trim(); });
+  // Send in chunks of 5; first chunk uses replaceFeatures to clear sheet
+  var FCHUNK2 = 5;
   var featChain = Promise.resolve();
-  allFeats.forEach(function(feat){
-    featChain = featChain.then(function(){ return gasCall('saveFeature', {feature: feat}); });
-  });
+  for(var fi2 = 0; fi2 < allFeats.length; fi2 += FCHUNK2){
+    (function(chunk, isFirst){
+      featChain = featChain.then(function(){
+        return gasCall(isFirst ? 'replaceFeatures' : 'saveFeatures', {features: chunk});
+      });
+    })(allFeats.slice(fi2, fi2+FCHUNK2), fi2 === 0);
+  }
+  if(allFeats.length === 0) featChain = gasCall('replaceFeatures', {features: []});
   var p2 = featChain;
 
-  // Spans — chunks of 20 in parallel
+  // Spans — use replaceSpans (clear + rewrite) to prevent duplicates
   var allSpans = [];
   members.forEach(function(m){
     var spans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]);
@@ -755,10 +762,13 @@ function pushAllToGas(){
       if((s.text||'').trim()) allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
     });
   });
+  // Send in chunks of 20 using replaceSpans on first chunk, saveSpans on rest
   var CHUNK = 20, spanPromises = [];
   for(var i = 0; i < allSpans.length; i += CHUNK){
-    spanPromises.push(gasCall('saveSpans', {spans: allSpans.slice(i, i+CHUNK)}));
+    var action = (i === 0) ? 'replaceSpans' : 'saveSpans';
+    spanPromises.push(gasCall(action, {spans: allSpans.slice(i, i+CHUNK)}));
   }
+  if(allSpans.length === 0) spanPromises.push(gasCall('replaceSpans', {spans: []}));
   var p3 = Promise.all(spanPromises);
 
   return Promise.all([p1, p2, p3]).then(function(){
