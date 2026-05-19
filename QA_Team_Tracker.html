@@ -1002,6 +1002,15 @@ function init(){
           return f || {summary:'',qa:'',effort:'',preprod:'',committed:'',comments:'',services:'',automation:''};
         });
 
+        // If GAS returned rows but all had blank summaries, fall back to seed
+        var realRows = FEATURES_DATA.filter(function(f){ return f.summary && f.summary.trim(); });
+        if(realRows.length === 0){
+          console.log('GAS Features sheet has no real rows — loading from seed and pushing to GAS');
+          FEATURES_DATA = JSON.parse(JSON.stringify(FEATURES_SEED));
+          // Push seed to GAS so next load works
+          pushAllToGas();
+        }
+
         console.log('Loaded', FEATURES_DATA.length, 'features from GAS');
       }
 
