@@ -746,7 +746,7 @@ function pushAllToGas(){
   for(var fi2 = 0; fi2 < allFeats.length; fi2 += FCHUNK2){
     (function(chunk, isFirst){
       featChain = featChain.then(function(){
-        return gasCall(isFirst ? 'replaceFeatures' : 'saveFeatures', {features: chunk});
+        return gasCall(isFirst ? 'replaceFeatures' : 'appendFeatures', {features: chunk});
       });
     })(allFeats.slice(fi2, fi2+FCHUNK2), fi2 === 0);
   }
@@ -765,7 +765,7 @@ function pushAllToGas(){
   for(var si = 0; si < allSpans.length; si += SCHUNK){
     (function(chunk, isFirst){
       spanChain = spanChain.then(function(){
-        return gasCall(isFirst ? 'replaceSpans' : 'saveSpans', {spans: chunk});
+        return gasCall(isFirst ? 'replaceSpans' : 'appendSpans', {spans: chunk});
       });
     })(allSpans.slice(si, si+SCHUNK), si === 0);
   }
@@ -1711,12 +1711,9 @@ function importCalendarExcel(e){
           var raw = row[ci];
           if(raw === null || raw === undefined || raw === '') return;
           var text = String(raw).trim();
-          // Normalise multiline — take first non-empty line as task title
-          var lines = text.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
-          // If multiple lines, create separate entries for each
-          lines.forEach(function(line){
-            if(line) cells.push({dateStr: dateMap[ci], text: line});
-          });
+          // Keep multiline cells as a single span — don't split into separate tasks
+          var cleaned = text.replace(/\r/g,'').trim();
+          cells.push({dateStr: dateMap[ci], text: cleaned});
         });
 
         // Group consecutive same-text cells into spans
