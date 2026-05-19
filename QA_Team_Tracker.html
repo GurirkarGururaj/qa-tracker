@@ -398,7 +398,7 @@ var customSpans = {}; // member_id -> [{text,type,start,end}] — user-added
 var weekStart = null;
 var pendingCell = null; // {memberId, dateStr}
 var editingSpan = null; // {memberId, idx}
-var ftSortCol = 'committed', ftSortAsc = true;
+var ftSortCol = 'none', ftSortAsc = true;
 var auditLog = [];    // [{ts, feature, field, oldVal, newVal}]
 var bugsData = {};    // key: feature index → [{id, summary, severity, status}]
 var deployedFeatures = {}; // key: feature index → true/false
@@ -1318,7 +1318,10 @@ function deleteFeatureRow(idx){
 }
 
 function sortFt(col){
-  if(ftSortCol===col) ftSortAsc=!ftSortAsc; else { ftSortCol=col; ftSortAsc=true; }
+  if(ftSortCol===col){
+    if(!ftSortAsc){ ftSortCol='none'; ftSortAsc=true; } // third click = reset to original order
+    else ftSortAsc=false;
+  } else { ftSortCol=col; ftSortAsc=true; }
   document.getElementById('s-preprod').textContent   = ftSortCol==='preprod'   ?(ftSortAsc?'↑':'↓'):'';
   document.getElementById('s-committed').textContent = ftSortCol==='committed' ?(ftSortAsc?'↑':'↓'):'';
   renderFeatures();
@@ -1720,9 +1723,7 @@ function upsertFromExcel(e){
       });
 
       localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
-      // Debug: show last 3 features
-      var last3 = FEATURES_DATA.slice(-3).map(function(f){ return f.summary; }).join(' | ');
-      status.textContent = '✓ '+added+' added, '+updated+' updated | Last 3: '+last3;
+      status.textContent = '✓ '+added+' added, '+updated+' updated — syncing to Google Sheets...';
       status.style.color = '#d97706';
       renderFeatures();
       // Push ALL features to GAS in ONE bulk call
@@ -1798,7 +1799,10 @@ function saveBugNotes(idx, val){
 
 
 function sortFt(col){
-  if(ftSortCol===col) ftSortAsc=!ftSortAsc; else { ftSortCol=col; ftSortAsc=true; }
+  if(ftSortCol===col){
+    if(!ftSortAsc){ ftSortCol='none'; ftSortAsc=true; } // third click = reset to original order
+    else ftSortAsc=false;
+  } else { ftSortCol=col; ftSortAsc=true; }
   document.getElementById('s-preprod').textContent   = ftSortCol==='preprod'   ?(ftSortAsc?'↑':'↓'):'';
   document.getElementById('s-committed').textContent = ftSortCol==='committed' ?(ftSortAsc?'↑':'↓'):'';
   renderFeatures();
@@ -2004,11 +2008,13 @@ function renderFeatures(){
     return isNaN(d)?new Date('2099-01-01'):d;
   }
 
-  var sorted = FEATURES_DATA.slice().sort(function(a,b){
-    var da = parseD(ftSortCol==='preprod'?a.preprod:a.committed);
-    var db = parseD(ftSortCol==='preprod'?b.preprod:b.committed);
-    return ftSortAsc?da-db:db-da;
-  });
+  var sorted = ftSortCol === 'none'
+    ? FEATURES_DATA.slice()
+    : FEATURES_DATA.slice().sort(function(a,b){
+        var da = parseD(ftSortCol==='preprod'?a.preprod:a.committed);
+        var db = parseD(ftSortCol==='preprod'?b.preprod:b.committed);
+        return ftSortAsc?da-db:db-da;
+      });
 
   document.getElementById('s-preprod').textContent   = ftSortCol==='preprod'   ?(ftSortAsc?'↑':'↓'):'';
   document.getElementById('s-committed').textContent = ftSortCol==='committed' ?(ftSortAsc?'↑':'↓'):'';
