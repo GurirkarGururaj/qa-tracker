@@ -753,12 +753,17 @@ function pushAllToGas(){
   if(allFeats.length === 0) featChain = gasCall('replaceFeatures', {features: []});
   var p2 = featChain;
 
-  // Spans — first chunk clears+rewrites, subsequent chunks append
+  // Spans — only push customSpans (non-seeded) to GAS to avoid duplicates
+  // Seeded spans live in MEMBER_SPANS hardcoded in the HTML, not in GAS
   var allSpans = [];
   members.forEach(function(m){
-    var spans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]);
-    spans.forEach(function(s){
-      if((s.text||'').trim()) allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
+    (customSpans[m.id]||[]).forEach(function(s){
+      if(!(s.text||'').trim()) return;
+      // Skip if this span is already in the seed
+      var isSeeded = (MEMBER_SPANS[m.id]||[]).some(function(ms){
+        return ms.text===s.text && ms.start===s.start;
+      });
+      if(!isSeeded) allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
     });
   });
   var SCHUNK = 20, spanChain = Promise.resolve();
