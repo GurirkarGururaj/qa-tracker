@@ -1401,7 +1401,7 @@ function switchTab(tab){
 
 // ═══════════════════════ FEATURES TABLE ══════════════════════════════════════
 function addFeatureRow(){
-  var newRow = {summary:'', qa:'', effort:'', preprod:'', committed:'', comments:'', services:'', automation:'—'};
+  var newRow = {summary:'', qa:'', effort:'', preprod:'', committed:'', comments:'', services:'', automation:'—', _new:true};
   FEATURES_DATA.push(newRow);
   var idx = FEATURES_DATA.length - 1;
   if(GAS_URL){
@@ -1482,6 +1482,7 @@ function onCommentsBlur(idx, el){
 // Generic handler for all other editable fields (summary, qa, preprod, committed, services, automation)
 function onFieldBlur(idx, field, el){
   var val = el.innerText.trim();
+  if(field === 'summary' && val && FEATURES_DATA[idx]) delete FEATURES_DATA[idx]._new;
   if(!FEATURES_DATA[idx]) return;
   var old = FEATURES_DATA[idx][field] || '';
   if(val === old) return;
@@ -2232,7 +2233,7 @@ function renderFeatures(){
 
   var html = '';
   sorted.forEach(function(f, si){
-    if(!f.summary || !f.summary.trim()) return; // skip blank rows
+    if((!f.summary || !f.summary.trim()) && !f._new) return; // skip blank rows unless newly added
     var origIdx = FEATURES_DATA.indexOf(f);
     if(origIdx<0) origIdx = si;
     var isDeployed = !!deployedFeatures[origIdx];
