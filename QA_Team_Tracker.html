@@ -1240,10 +1240,11 @@ function saveTask(){
   var span = {text:text, type:type, start:start, end:end};
   customSpans[mid].push(span);
   if(GAS_URL){
-    gasCall('saveSpan', {
-      span: JSON.stringify({id:spanId(mid,span), memberId:mid, text:text, type:type, start:start, end:end})
-    });
-    gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:memberName, field:editingSpan?'Task Edited':'Task Added', oldVal:editingSpan?editingSpan.text:'', newVal:text+' ('+start+' to '+end+')'});
+    var spanObj = {id:spanId(mid,span), memberId:mid, text:text, type:type, start:start, end:end};
+    gasCall('saveSpan', {span: JSON.stringify(spanObj)});
+    var logField = editingSpan ? 'Task Edited' : 'Task Added';
+    var logOld = editingSpan ? editingSpan.text : '';
+    gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:memberName, field:logField, oldVal:logOld, newVal:text+' ('+start+' to '+end+')'});
   }
   closeModal();
   saveData();
