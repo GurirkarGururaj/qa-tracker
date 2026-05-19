@@ -732,7 +732,7 @@ function pushSequential(action, key, records){
 function pushAllToGas(){
   var p1 = gasCall('saveMembers', {members: members});
 
-  // Features — clear and rewrite to prevent duplicates
+  // Features — single replaceFeatures call (fast batch write on server)
   var allFeats = FEATURES_DATA.map(function(f, i){
     return {
       id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:effortData[i]||f.effort||'',
@@ -741,9 +741,8 @@ function pushAllToGas(){
       deployed:deployedFeatures[i]?'1':'', notes:bugsData[i]||''
     };
   }).filter(function(f){ return (f.summary||'').trim(); });
-  // Send in chunks of 5; first chunk uses replaceFeatures to clear sheet
-  var FCHUNK2 = 5;
-  var featChain = Promise.resolve();
+  // Send in chunks of 10 to stay within URL limit; first = replace, rest = append
+  var FCHUNK2 = 10, featChain = Promise.resolve();
   for(var fi2 = 0; fi2 < allFeats.length; fi2 += FCHUNK2){
     (function(chunk, isFirst){
       featChain = featChain.then(function(){
@@ -754,7 +753,7 @@ function pushAllToGas(){
   if(allFeats.length === 0) featChain = gasCall('replaceFeatures', {features: []});
   var p2 = featChain;
 
-  // Spans — use replaceSpans (clear + rewrite) to prevent duplicates
+  // Spans — first chunk clears+rewrites, subsequent chunks append
   var allSpans = [];
   members.forEach(function(m){
     var spans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]);
@@ -762,14 +761,16 @@ function pushAllToGas(){
       if((s.text||'').trim()) allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
     });
   });
-  // Send in chunks of 20 using replaceSpans on first chunk, saveSpans on rest
-  var CHUNK = 20, spanPromises = [];
-  for(var i = 0; i < allSpans.length; i += CHUNK){
-    var action = (i === 0) ? 'replaceSpans' : 'saveSpans';
-    spanPromises.push(gasCall(action, {spans: allSpans.slice(i, i+CHUNK)}));
+  var SCHUNK = 20, spanChain = Promise.resolve();
+  for(var si = 0; si < allSpans.length; si += SCHUNK){
+    (function(chunk, isFirst){
+      spanChain = spanChain.then(function(){
+        return gasCall(isFirst ? 'replaceSpans' : 'saveSpans', {spans: chunk});
+      });
+    })(allSpans.slice(si, si+SCHUNK), si === 0);
   }
-  if(allSpans.length === 0) spanPromises.push(gasCall('replaceSpans', {spans: []}));
-  var p3 = Promise.all(spanPromises);
+  if(allSpans.length === 0) spanChain = gasCall('replaceSpans', {spans: []});
+  var p3 = spanChain;
 
   return Promise.all([p1, p2, p3]).then(function(){
     console.log('pushAllToGas complete: '+allSpans.length+' spans, '+allFeats.length+' features');
