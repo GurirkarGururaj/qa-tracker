@@ -1124,8 +1124,10 @@ function render(){
 
       var chip = '<div class="span-chip '+typeClass+'" '
         + 'style="position:absolute;left:2px;top:'+top+'px;width:'+chipW+'px;'
-        + 'border-radius:'+rLeft+' '+rRight+' '+rRight+' '+rLeft+';'+bLeft+'" '
-        + 'title="'+escH(span.text)+'">'
+        + 'border-radius:'+rLeft+' '+rRight+' '+rRight+' '+rLeft+';'+bLeft+'cursor:pointer;" '
+        + 'title="Click to edit | '+escH(span.text)+'" '
+        + 'data-edit="1" data-mid="'+escH(m.id)+'" data-start="'+escH(span.start)+'" data-end="'+escH(span.end)+'" data-text="'+escH(span.text)+'" data-type="'+escH(span.type||'feature')+'" '
+        + 'onclick="event.stopPropagation();chipClick(this)" >'
         + escH(span.text.length>42?span.text.substring(0,40)+'…':span.text)
         + delBtn + '</div>';
 
@@ -1155,9 +1157,35 @@ function render(){
 
 
 // ═══════════════════════ MODAL ══════════════════════════════════════════════
+function chipClick(el){
+  var mid   = el.dataset.mid;
+  var start = el.dataset.start;
+  var end   = el.dataset.end;
+  var text  = el.dataset.text;
+  var type  = el.dataset.type || 'feature';
+  openEditModal(mid, start, end, text, type);
+}
+
+function openEditModal(memberId, start, end, text, type){
+  // Open modal pre-filled with existing span data
+  pendingCell = {memberId: memberId, dateStr: start};
+  editingSpan = {memberId: memberId, start: start, end: end, text: text, type: type};
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('modal-lbl').textContent = 'Edit Task — '+(members.find(function(m){return m.id===memberId;})||{}).name+' · '+start;
+  document.getElementById('task-txt').value = text;
+  document.getElementById('task-end').value = end;
+  // Select correct type button
+  var tl = type.toLowerCase();
+  document.querySelectorAll('.type-btn').forEach(function(b){ b.classList.remove('selected'); });
+  var match = Array.from(document.querySelectorAll('.type-btn')).find(function(b){ return b.textContent.toLowerCase().includes(tl); });
+  if(match) match.classList.add('selected');
+  setTimeout(function(){ document.getElementById('task-txt').select(); }, 80);
+}
+
 function openModal(memberId, dateStr){
-  pendingCell = {memberId, dateStr};
+  pendingCell = {memberId: memberId, dateStr: dateStr};
   editingSpan = null;
+  document.getElementById('modal-lbl').textContent = 'Add Task — '+(members.find(function(m){return m.id===memberId;})||{}).name+' · '+dateStr;
   var m = members.find(x=>x.id===memberId);
   var d = new Date(dateStr+'T00:00:00');
   document.getElementById('modal-lbl').textContent = 'Add Task — '+m.name+' · '+DAYS[d.getDay()]+' '+d.getDate()+' '+MONTHS[d.getMonth()];
@@ -1189,15 +1217,33 @@ function saveTask(){
   var mid = pendingCell.memberId;
   var memberName = (members.find(function(m){ return m.id===mid; })||{}).name || mid;
   if(!customSpans[mid]) customSpans[mid] = [];
+
+  // If editing existing span, remove the old one first
+  if(editingSpan){
+    var oldSpan = editingSpan;
+    // Remove from customSpans
+    var idx = customSpans[mid].findIndex(function(s){ return s.text===oldSpan.text && s.start===oldSpan.start; });
+    if(idx >= 0) customSpans[mid].splice(idx, 1);
+    // Also handle seeded spans - add to deleted seeds if it was seeded
+    var wasSeeded = !(MEMBER_SPANS[mid]||[]).every(function(ms){ return ms.text!==oldSpan.text || ms.start!==oldSpan.start; });
+    if(wasSeeded){
+      var deleted = JSON.parse(localStorage.getItem('qa_deleted_seeds')||'[]');
+      deleted.push({mid:mid, start:oldSpan.start, text:oldSpan.text});
+      localStorage.setItem('qa_deleted_seeds', JSON.stringify(deleted));
+    }
+    if(GAS_URL) gasCall('deleteSpan', {id: spanId(mid, oldSpan)});
+    logChange(memberName, 'Task Edited', oldSpan.text, text+' ('+start+' to '+end+')');
+  } else {
+    logChange(memberName, 'Task Added', '', text+' ('+start+' to '+end+')');
+  }
+
   var span = {text:text, type:type, start:start, end:end};
   customSpans[mid].push(span);
-  logChange(memberName, 'Task Added', '', text+' ('+start+' to '+end+')');
   if(GAS_URL){
-    // Send each field separately to avoid URL length issues with long task text
     gasCall('saveSpan', {
       span: JSON.stringify({id:spanId(mid,span), memberId:mid, text:text, type:type, start:start, end:end})
     });
-    gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:memberName, field:'Task Added', oldVal:'', newVal:text.substring(0,80)+' ('+start+' to '+end+')'});
+    gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:memberName, field:editingSpan?'Task Edited':'Task Added', oldVal:editingSpan?editingSpan.text:'', newVal:text+' ('+start+' to '+end+')'});
   }
   closeModal();
   saveData();
