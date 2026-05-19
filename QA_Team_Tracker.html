@@ -216,6 +216,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
     <button class="main-tab active" id="tab-calendar" onclick="switchTab('calendar')">📅 Calendar</button>
     <button class="main-tab" id="tab-features" onclick="switchTab('features')">📋 Features &amp; Dates</button>
     <button class="main-tab" id="tab-audit" onclick="switchTab('audit')">📝 Audit Log</button>
+    <button class="main-tab" id="tab-avail" onclick="switchTab('avail')">👥 Availability</button>
   </div>
   <div class="topbar-right">
     <div id="user-id-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer;" onclick="promptIdentity(true)" title="Click to change your name">
@@ -1312,6 +1313,9 @@ function switchTab(tab){
   document.getElementById('legend-bar').style.display = isCal?'flex':'none';
   document.getElementById('features-view').style.display = isFeat?'block':'none';
   document.getElementById('audit-view').style.display = isAudit?'block':'none';
+  var isAvail = tab==='avail';
+  document.getElementById('avail-view').style.display = isAvail?'block':'none';
+  if(isAvail) renderAvailability();
   document.getElementById('main-content').style.overflow = 'hidden';
   document.getElementById('week-nav').style.display = isCal?'flex':'none';
   document.getElementById('btn-members').style.display = isCal?'':'none';
@@ -1459,6 +1463,89 @@ function logChange(featureSummary, field, oldVal, newVal){
   auditLog.unshift(entry);
   if(auditLog.length > 500) auditLog.length = 500;
   localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData}));
+}
+
+// ═══════════════════════ AVAILABILITY VIEW ════════════════════════════════════
+function renderAvailability(){
+  var container = document.getElementById('avail-content');
+  if(!container) return;
+  var dates = getDates();
+  var DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Build busy map
+  var busyMap = {};
+  var deletedSeeds = JSON.parse(localStorage.getItem('qa_deleted_seeds')||'[]');
+  members.forEach(function(m){
+    busyMap[m.id] = {};
+    var allSpans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]).filter(function(s){
+      return !deletedSeeds.some(function(d){ return d.mid===m.id && d.start===s.start && d.text===s.text; });
+    });
+    allSpans.forEach(function(span){
+      var d = new Date(span.start+'T00:00:00');
+      var end = new Date((span.end||span.start)+'T00:00:00');
+      while(d <= end){ busyMap[m.id][ds(d)] = true; d.setDate(d.getDate()+1); }
+    });
+  });
+
+  var h = '<div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
+    + '<span style="font-size:13px;font-weight:600;color:var(--txt);">Resource availability — current 2-week window</span>'
+    + '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#dcfce7;color:#16a34a;border:1px solid #86efac;">● Available</span>'
+    + '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;">● Busy</span>'
+    + '</div>';
+
+  // Grid table
+  h += '<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-family:var(--sans);font-size:12px;">';
+  h += '<thead><tr><th style="text-align:left;padding:8px 14px;background:#f1f5f9;border:1px solid #e2e8f0;min-width:120px;position:sticky;left:0;z-index:2;">Member</th>';
+  dates.forEach(function(d){
+    var wknd = d.getDay()===0||d.getDay()===6;
+    var today = ds(d)===ds(new Date());
+    h += '<th style="text-align:center;padding:6px 3px;min-width:48px;background:'+(today?'#dbeafe':wknd?'#f9fafb':'#f1f5f9')+';border:'+(today?'2px solid #3b82f6':'1px solid #e2e8f0')+';font-size:10px;color:'+(today?'#1d4ed8':'#475569')+';font-weight:'+(today?700:500)+';">'
+      + DAYS_SHORT[d.getDay()]+'<br>'+d.getDate()+'</th>';
+  });
+  h += '<th style="text-align:center;padding:6px 8px;background:#f1f5f9;border:1px solid #e2e8f0;font-size:10px;min-width:60px;">Free<br>Days</th></tr></thead><tbody>';
+
+  members.forEach(function(m){
+    var free = 0;
+    h += '<tr><td style="padding:7px 14px;border:1px solid #e2e8f0;white-space:nowrap;background:#fff;position:sticky;left:0;z-index:1;">'
+      + '<div style="display:flex;align-items:center;gap:7px;">'
+      + '<div style="width:24px;height:24px;border-radius:50%;background:'+m.color+'22;color:'+m.color+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">'+m.name.slice(0,2).toUpperCase()+'</div>'
+      + escH(m.name)+'</div></td>';
+    dates.forEach(function(d){
+      var wknd = d.getDay()===0||d.getDay()===6;
+      var today = ds(d)===ds(new Date());
+      var busy = busyMap[m.id][ds(d)];
+      var bg = wknd ? '#f9fafb' : busy ? '#fee2e2' : '#f0fdf4';
+      var dot = wknd ? '' : (busy ? '<span style="color:#dc2626;font-size:13px;line-height:1;">●</span>' : '<span style="color:#16a34a;font-size:13px;line-height:1;">●</span>');
+      if(!wknd && !busy) free++;
+      h += '<td style="text-align:center;padding:5px 2px;background:'+bg+';border:'+(today?'2px solid #93c5fd':'1px solid #e2e8f0')+';" title="'+escH(m.name)+' '+ds(d)+(busy?' - Busy':wknd?' - Weekend':' - Available')+'">'+dot+'</td>';
+    });
+    var weekdays = dates.filter(function(d){ return d.getDay()!==0&&d.getDay()!==6; }).length;
+    var pct = weekdays>0?Math.round(free/weekdays*100):0;
+    h += '<td style="text-align:center;padding:7px;border:1px solid #e2e8f0;font-weight:600;font-size:12px;color:'+(pct>=70?'#16a34a':pct>=40?'#d97706':'#dc2626')+';">'+free+'/'+weekdays+'</td></tr>';
+  });
+  h += '</tbody></table></div>';
+
+  // Daily summary cards
+  h += '<div style="margin-top:24px;"><div style="font-size:13px;font-weight:600;margin-bottom:12px;">📊 Who is free each day</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+  dates.forEach(function(d){
+    if(d.getDay()===0||d.getDay()===6) return;
+    var today = ds(d)===ds(new Date());
+    var avail = members.filter(function(m){ return !busyMap[m.id][ds(d)]; });
+    h += '<div style="background:'+(today?'#eff6ff':'#f8fafc')+';border:1px solid '+(today?'#3b82f6':'#e2e8f0')+';border-radius:8px;padding:10px 14px;min-width:130px;">';
+    h += '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">'+DAYS_SHORT[d.getDay()]+' '+d.getDate()+' '+MONTHS_SHORT[d.getMonth()]+'</div>';
+    if(avail.length){
+      h += '<div style="font-size:11px;color:#16a34a;font-weight:600;margin-bottom:3px;">Free: '+avail.length+'</div>';
+      avail.forEach(function(m){ h += '<div style="font-size:11px;color:#374151;">'+escH(m.name)+'</div>'; });
+    } else {
+      h += '<div style="font-size:11px;color:#9ca3af;font-style:italic;">All busy</div>';
+    }
+    h += '</div>';
+  });
+  h += '</div></div>';
+
+  container.innerHTML = h;
 }
 
 function renderAudit(){
