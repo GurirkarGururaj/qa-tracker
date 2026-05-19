@@ -806,11 +806,11 @@ function init(){
       var s = JSON.parse(saved);
       if(s.members) members = s.members;
       if(s.customSpans){
-        // Filter out any span that matches a seeded span by text — removes old duplicates
+        // Filter out any span that matches a seeded span (normalized text comparison)
         var cleaned = {};
         Object.keys(s.customSpans).forEach(function(mid){
+          function n(t){ return String(t||'').replace(/\s+/g,' ').trim(); }
           cleaned[mid] = (s.customSpans[mid]||[]).filter(function(cs){
-            function n(t){ return String(t||'').replace(/\s+/g,' ').trim(); }
             return !(MEMBER_SPANS[mid]||[]).some(function(ms){ return n(ms.text)===n(cs.text); });
           });
         });
@@ -913,7 +913,8 @@ function init(){
           if(s.id === 'test123' || mid === 'm_test') return;
           var text = (s.text||'').trim();
           if(!text) return;
-          // Filter out any span whose text matches a seeded span (normalized comparison)
+          // Filter out any span whose text matches a seeded span (regardless of dates)
+          // This cleans up old GAS data that duplicates seeded spans
           function normT(t){ return String(t||'').replace(/\s+/g,' ').trim(); }
           var seeded = (MEMBER_SPANS[mid]||[]).some(function(ms){
             return normT(ms.text)===normT(text);
@@ -1769,10 +1770,9 @@ function importCalendarExcel(e){
         // Upsert each span
         spans.forEach(function(span){
           var type = getType(span.text);
-          // Normalize text for comparison (collapse whitespace, newlines)
+          // Already in seeded data? Skip (normalize whitespace for comparison)
           function normText(t){ return String(t||'').replace(/\s+/g,' ').trim(); }
           var normSpan = normText(span.text);
-          // Already in seeded data? Skip (match by normalized text only — dates may differ)
           var inSeeded = seededSpans.some(function(s){
             return normText(s.text) === normSpan;
           });
