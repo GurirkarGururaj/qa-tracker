@@ -694,12 +694,13 @@ function syncCalendarToGas(){
   if(btn){ btn.textContent='☁ Syncing…'; btn.disabled=true; }
   showSyncStatus('Syncing calendar to Google Sheets…');
 
-  // Build full span list (seeded + custom)
+  // Only push custom spans (non-seeded) — seeded spans live in HTML, not GAS
   var allSpans = [];
   members.forEach(function(m){
-    var spans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]);
-    spans.forEach(function(s){
-      if((s.text||'').trim()) allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
+    (customSpans[m.id]||[]).forEach(function(s){
+      if(!(s.text||'').trim()) return;
+      var isSeeded = (MEMBER_SPANS[m.id]||[]).some(function(ms){ return ms.text===s.text && ms.start===s.start; });
+      if(!isSeeded) allSpans.push({id:spanId(m.id,s), memberId:m.id, text:s.text, type:s.type, start:s.start, end:s.end});
     });
   });
 
@@ -883,8 +884,10 @@ function init(){
           if(s.id === 'test123' || mid === 'm_test') return;
           var text = (s.text||'').trim();
           if(!text) return;
+          // Filter out any span whose text matches a seeded span (regardless of dates)
+          // This cleans up old GAS data that duplicates seeded spans
           var seeded = (MEMBER_SPANS[mid]||[]).some(function(ms){
-            return ms.text===text && ms.start===s.start;
+            return ms.text===text;
           });
           if(seeded) return;
           if(!newCustomSpans[mid]) newCustomSpans[mid] = [];
