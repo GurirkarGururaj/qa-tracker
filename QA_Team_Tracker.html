@@ -227,7 +227,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
     </div>
     <div style="width:1px;height:18px;background:rgba(255,255,255,.12);margin:0 3px;"></div>
     <button class="btn btn-ghost" id="btn-members" onclick="openMemberMgr()">⚙ Members</button>
-    <button class="btn btn-ghost" id="btn-gas" onclick="openGasSettings()" title="Connect to Google Sheets">⛅ Sheets</button>
+    <button class="btn btn-ghost" id="btn-gas" onclick="openGasSettings()" ondblclick="diagGas()" title="Connect to Google Sheets | Double-click to diagnose">⛅ Sheets</button>
     <button class="btn btn-primary" id="btn-cal-sync" onclick="syncCalendarToGas()" style="display:none;">↑ Sync</button>
     <label id="btn-cal-upload" class="btn btn-ghost" style="cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,.15)';this.style.color='#fff'" onmouseout="this.style.background='rgba(255,255,255,.08)';this.style.color='rgba(255,255,255,.75)'">
       ↑ Import
@@ -2426,6 +2426,53 @@ function exportDeployReport(){
   a.href = URL.createObjectURL(blob);
   a.download = 'deployment-report-'+from+'-to-'+to+'.csv';
   a.click();
+}
+
+
+function diagGas(){
+  if(!GAS_URL){ alert('No GAS URL set'); return; }
+  var out = document.createElement('div');
+  out.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#1e1e1e;color:#d4d4d4;font-family:monospace;font-size:12px;padding:20px;border-radius:8px;width:700px;max-height:80vh;overflow:auto;white-space:pre-wrap;';
+  box.textContent = 'Testing GAS connection...\nURL: ' + GAS_URL + '\n\n';
+  out.appendChild(box);
+  out.onclick = function(e){ if(e.target===out) out.remove(); };
+  document.body.appendChild(out);
+
+  gasGet('loadAll', {}).then(function(data){
+    if(!data){ box.textContent += 'ERROR: No response (timeout or network error)\n'; return; }
+    if(data.error){ box.textContent += 'GAS ERROR: ' + data.error + '\n'; return; }
+    
+    box.textContent += '✓ Connected!\n';
+    box.textContent += '\nMembers: ' + (data.members||[]).length + ' rows';
+    box.textContent += '\nSpans: ' + (data.spans||[]).length + ' rows';
+    box.textContent += '\nFeatures: ' + (data.features||[]).length + ' rows';
+    
+    // Check Features headers
+    if(data.features && data.features[0]){
+      var keys = Object.keys(data.features[0]);
+      box.textContent += '\n\nFeatures columns returned: ' + keys.join(', ');
+      var hasDeployed = keys.includes('deployed');
+      box.textContent += '\n"deployed" column present: ' + (hasDeployed ? '✓ YES' : '✗ NO — this is the bug!');
+      
+      // Show first 3 features with their deployed value
+      box.textContent += '\n\nFirst 3 features:';
+      data.features.slice(0,3).forEach(function(f,i){
+        box.textContent += '\n  [' + i + '] deployed="' + f.deployed + '" | ' + (f.summary||'').substring(0,50);
+      });
+    } else {
+      box.textContent += '\n\nFeatures sheet is EMPTY — Code.gs replaceFeatures was never run';
+    }
+    
+    // Also check spans
+    if(data.spans && data.spans[0]){
+      box.textContent += '\n\nSpans columns: ' + Object.keys(data.spans[0]).join(', ');
+      box.textContent += '\nFirst span: ' + JSON.stringify(data.spans[0]);
+    }
+    
+    box.textContent += '\n\n[Click outside to close]';
+  });
 }
 
 </script>
