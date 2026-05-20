@@ -432,7 +432,10 @@ var currentTab = 'calendar';
 //  GOOGLE APPS SCRIPT BACKEND CONFIG
 //  After deploying your Apps Script, paste the Web App URL below
 // ═══════════════════════════════════════════════════════════════════
-var GAS_URL = localStorage.getItem('qa_gas_url') || '';
+// ── GAS URL — hardcoded so all team members share the same backend ──────────
+// To update: paste your Apps Script /exec URL below
+var GAS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbxTfJNeNB3kydardXnhJSrEMII3T7_gh14HbuoCiE6-BAvIeg93vFcKgRFn42IIsR1U0g/exec'; // <-- PASTE YOUR APPS SCRIPT URL HERE
+var GAS_URL = GAS_URL_DEFAULT || localStorage.getItem('qa_gas_url') || '';
 
 // ── GAS communication ─────────────────────────────────────────────────────────
 // Uses JSONP for reads (GET) and XMLHttpRequest for writes.
@@ -815,42 +818,44 @@ function pushAllToGas(){
 
 // ═══════════════════════ INIT ════════════════════════════════════════════════
 function init(){
-  // Always restore from localStorage first (instant, no flash)
+  // Restore only non-shared local data from localStorage (identity, audit log)
+  // All shared data (spans, features, members, deployed) MUST come from GAS
   var saved = localStorage.getItem('qa_tracker_v3');
   if(saved){
     try{
       var s = JSON.parse(saved);
-      if(s.members) members = s.members;
-      if(s.customSpans){
-        // Filter out any span that matches a seeded span (normalized text comparison)
-        var cleaned = {};
-        Object.keys(s.customSpans).forEach(function(mid){
-          function n(t){ return String(t||'').replace(/\s+/g,' ').trim(); }
-          cleaned[mid] = (s.customSpans[mid]||[]).filter(function(cs){
-            return !(MEMBER_SPANS[mid]||[]).some(function(ms){ return n(ms.text)===n(cs.text); });
-          });
-        });
-        customSpans = cleaned;
-      }
-      if(s.deployedFeatures) deployedFeatures = s.deployedFeatures;
-      if(s.effortData){
-        effortData = s.effortData;
-        Object.keys(effortData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].effort=effortData[k]; });
-      }
-      if(s.commentsData){
-        commentsData = s.commentsData;
-        Object.keys(commentsData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].comments=commentsData[k]; });
-      }
       if(s.auditLog) auditLog = s.auditLog;
-      if(s.featuresData) FEATURES_DATA = s.featuresData;
-      if(s.bugsData){
-        bugsData = s.bugsData;
-        // Convert legacy array format to string
-        Object.keys(bugsData).forEach(function(k){
-          if(Array.isArray(bugsData[k])){
-            bugsData[k] = bugsData[k].map(function(b){ return (b.id||'')+(b.summary?' - '+b.summary:''); }).join('\n');
-          }
-        });
+      // Only use localStorage for shared data if GAS is not connected (offline fallback)
+      if(!GAS_URL){
+        if(s.members) members = s.members;
+        if(s.customSpans){
+          var cleaned = {};
+          Object.keys(s.customSpans).forEach(function(mid){
+            function n(t){ return String(t||'').replace(/\s+/g,' ').trim(); }
+            cleaned[mid] = (s.customSpans[mid]||[]).filter(function(cs){
+              return !(MEMBER_SPANS[mid]||[]).some(function(ms){ return n(ms.text)===n(cs.text); });
+            });
+          });
+          customSpans = cleaned;
+        }
+        if(s.deployedFeatures) deployedFeatures = s.deployedFeatures;
+        if(s.effortData){
+          effortData = s.effortData;
+          Object.keys(effortData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].effort=effortData[k]; });
+        }
+        if(s.commentsData){
+          commentsData = s.commentsData;
+          Object.keys(commentsData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].comments=commentsData[k]; });
+        }
+        if(s.featuresData) FEATURES_DATA = s.featuresData;
+        if(s.bugsData){
+          bugsData = s.bugsData;
+          Object.keys(bugsData).forEach(function(k){
+            if(Array.isArray(bugsData[k])){
+              bugsData[k] = bugsData[k].map(function(b){ return (b.id||'')+(b.summary?' - '+b.summary:''); }).join('\n');
+            }
+          });
+        }
       }
     }catch(e){}
   }
