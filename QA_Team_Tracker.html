@@ -2534,6 +2534,15 @@ function diagGas(){
       box.textContent += '\nFirst span: ' + JSON.stringify(data.spans[0]);
     }
     
+    // Show customSpans for debugging
+    box.textContent += '\n\nCustom spans in memory:';
+    var allMids = Object.keys(customSpans);
+    if(allMids.length === 0){ box.textContent += ' (none)'; }
+    allMids.forEach(function(mid){
+      (customSpans[mid]||[]).forEach(function(s){
+        box.textContent += '\n  '+mid+' | '+s.start+' → '+s.end+' | '+s.text.substring(0,40);
+      });
+    });
     box.textContent += '\n\n[Click outside to close]';
   });
 }
