@@ -434,7 +434,7 @@ var currentTab = 'calendar';
 // ═══════════════════════════════════════════════════════════════════
 // ── GAS URL — hardcoded so all team members share the same backend ──────────
 // To update: paste your Apps Script /exec URL below
-var GAS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbxTfJNeNB3kydardXnhJSrEMII3T7_gh14HbuoCiE6-BAvIeg93vFcKgRFn42IIsR1U0g/exec'; // <-- PASTE YOUR APPS SCRIPT URL HERE
+var GAS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbxTfJNeNB3kydardXnhJSrEMII3T7_gh14HbuoCiE6-BAvIeg93vFcKgRFn42IIsR1U0g/exec';
 var GAS_URL = GAS_URL_DEFAULT || localStorage.getItem('qa_gas_url') || '';
 
 // ── GAS communication ─────────────────────────────────────────────────────────
@@ -1024,6 +1024,58 @@ function init(){
       // Show member picker on first visit if identity not set
       if(!localStorage.getItem('qa_user_identity')){
         promptIdentity();
+      }
+
+      // Auto-push if Features sheet looks sparse (deployed column all blank)
+      // This self-heals for anyone whose GAS sheet was never fully populated
+      var deployedInGas = (data.features||[]).filter(function(f){ return f.deployed==='1'; }).length;
+      var deployedLocally = Object.keys(deployedFeatures).length;
+      if(deployedLocally > 0 && deployedInGas === 0){
+        console.log('GAS has no deployed status but local does — pushing all to GAS');
+        pushAllToGas();
+      }
+
+      // Poll GAS every 60s so all users see each other's changes without reloading
+      if(!window._gasPoller){
+        window._gasPoller = setInterval(function(){
+          if(!GAS_URL) return;
+          gasGet('loadAll',{}).then(function(d){
+            if(!d || d.error) return;
+            // Re-apply features overlay silently
+            if(d.features && d.features.length){
+              d.features.forEach(function(f){
+                if(!f.summary||!f.summary.trim()) return;
+                var si = FEATURES_DATA.findIndex(function(s){
+                  return s.summary && s.summary.trim().substring(0,40)===f.summary.trim().substring(0,40);
+                });
+                if(si<0){ var ix=parseInt((f.id||'').replace('feat_','')); if(!isNaN(ix)&&FEATURES_DATA[ix]) si=ix; }
+                if(si<0) return;
+                if(f.deployed==='1'||f.deployed==='true') deployedFeatures[si]=true;
+                else if(f.deployed==='0'||f.deployed==='false') delete deployedFeatures[si];
+                if(f.effort)   { effortData[si]=f.effort;   FEATURES_DATA[si].effort=f.effort; }
+                if(f.comments) { commentsData[si]=f.comments; FEATURES_DATA[si].comments=f.comments; }
+                if(f.notes)    bugsData[si]=f.notes;
+              });
+            }
+            // Re-apply spans silently
+            if(d.spans && d.spans.length){
+              var newCustom = {};
+              d.spans.forEach(function(s){
+                if(!s.memberId||!s.text) return;
+                var isSeeded = (MEMBER_SPANS[s.memberId]||[]).some(function(ms){
+                  return ms.text===s.text && ms.start===s.start;
+                });
+                if(!isSeeded){
+                  if(!newCustom[s.memberId]) newCustom[s.memberId]=[];
+                  newCustom[s.memberId].push({text:s.text,type:s.type,start:s.start,end:s.end});
+                }
+              });
+              customSpans = newCustom;
+            }
+            render();
+            if(currentTab==='audit') renderAudit();
+          });
+        }, 60000);
       }
     });
   } else {
