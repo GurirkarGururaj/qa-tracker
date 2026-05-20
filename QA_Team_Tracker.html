@@ -936,6 +936,9 @@ function init(){
           if(s.id === 'test123' || mid === 'm_test') return;
           var text = (s.text||'').trim();
           if(!text) return;
+          // Strip time component from dates stored as ISO strings by GAS
+          if(s.start && s.start.length > 10) s.start = s.start.substring(0,10);
+          if(s.end && s.end.length > 10) s.end = s.end.substring(0,10);
           // Filter out any span whose text matches a seeded span (regardless of dates)
           // This cleans up old GAS data that duplicates seeded spans
           function normT(t){ return String(t||'').replace(/\s+/g,' ').trim(); }
@@ -1063,6 +1066,8 @@ function init(){
               var newCustom = {};
               d.spans.forEach(function(s){
                 if(!s.memberId||!s.text) return;
+                if(s.start && s.start.length > 10) s.start = s.start.substring(0,10);
+                if(s.end && s.end.length > 10) s.end = s.end.substring(0,10);
                 var isSeeded = (MEMBER_SPANS[s.memberId]||[]).some(function(ms){
                   return ms.text===s.text && ms.start===s.start;
                 });
