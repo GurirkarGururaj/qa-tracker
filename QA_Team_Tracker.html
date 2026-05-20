@@ -280,6 +280,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
       <input type="file" id="feat-excel-upload" accept=".xlsx,.xls,.csv" style="display:none" onchange="upsertFromExcel(event)"/>
     </label>
     <span id="upsert-status" style="font-size:12px;font-family:var(--mono);color:#6b7280;"></span>
+    <button onclick="openDeployReport()" style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;border:1.5px solid #6366f1;background:#eef2ff;color:#4f46e5;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);">📋 Deployment Report</button>
   </div>
   <div class="ft-wrap">
     <table class="ft">
@@ -2312,6 +2313,225 @@ function exportCSV(){
 
 
 init();
+
+// ═══════════════════════ DEPLOYMENT REPORT ══════════════════════════════════
+function openDeployReport(){
+  var overlay = document.getElementById('deploy-report-overlay');
+  overlay.style.display = 'flex';
+
+  // Populate QA owner dropdown from current data
+  var qaSet = new Set();
+  FEATURES_DATA.forEach(function(f){ if(f.qa && f.qa.trim()) f.qa.split(/[,&]+/).forEach(function(q){ qaSet.add(q.trim()); }); });
+  var qaSel = document.getElementById('dr-qa');
+  qaSel.innerHTML = '<option value="">All</option>';
+  Array.from(qaSet).sort().forEach(function(q){ var o=document.createElement('option'); o.value=q; o.textContent=q; qaSel.appendChild(o); });
+
+  // Default date range: today to +14 days
+  var today = new Date();
+  var fwd   = new Date(); fwd.setDate(today.getDate()+14);
+  document.getElementById('dr-from').value = today.toISOString().substring(0,10);
+  document.getElementById('dr-to').value   = fwd.toISOString().substring(0,10);
+
+  renderDeployReport();
+}
+
+function closeDeployReport(){
+  document.getElementById('deploy-report-overlay').style.display = 'none';
+}
+
+function parseDR(s){
+  if(!s || s==='—' || s.toLowerCase()==='pending' || s.toLowerCase()==='preprod date') return null;
+  var d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function renderDeployReport(){
+  var from      = document.getElementById('dr-from').value;
+  var to        = document.getElementById('dr-to').value;
+  var dateField = document.getElementById('dr-datefield').value;
+  var qaFilter  = document.getElementById('dr-qa').value.toLowerCase();
+
+  var fromD = from ? new Date(from) : null;
+  var toD   = to   ? new Date(to)   : null;
+  if(toD) toD.setHours(23,59,59,999); // inclusive end
+
+  var results = FEATURES_DATA.filter(function(f, idx){
+    if(!f.summary || !f.summary.trim()) return false;
+    var d = parseDR(dateField === 'preprod' ? f.preprod : f.committed);
+    if(!d) return false;
+    if(fromD && d < fromD) return false;
+    if(toD   && d > toD)   return false;
+    if(qaFilter && !(f.qa||'').toLowerCase().includes(qaFilter)) return false;
+    return true;
+  });
+
+  // Sort by the chosen date field
+  results.sort(function(a,b){
+    var da = parseDR(dateField==='preprod'?a.preprod:a.committed)||new Date('2099-01-01');
+    var db = parseDR(dateField==='preprod'?b.preprod:b.committed)||new Date('2099-01-01');
+    return da-db;
+  });
+
+  // Summary strip
+  var qaCounts = {};
+  results.forEach(function(f){
+    (f.qa||'Unknown').split(/[,&]+/).forEach(function(q){
+      q = q.trim(); qaCounts[q] = (qaCounts[q]||0)+1;
+    });
+  });
+  var summaryParts = Object.keys(qaCounts).sort().map(function(q){ return q+': '+qaCounts[q]; });
+  document.getElementById('dr-summary').textContent =
+    results.length + ' feature' + (results.length!==1?'s':'') + ' in range' +
+    (summaryParts.length ? '  |  ' + summaryParts.join('  ·  ') : '');
+
+  var tbody = document.getElementById('dr-tbody');
+  var empty = document.getElementById('dr-empty');
+
+  if(!results.length){
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  // Group by date for visual separation
+  var lastDate = '';
+  tbody.innerHTML = results.map(function(f, i){
+    var idx = FEATURES_DATA.indexOf(f);
+    var dateVal = dateField==='preprod' ? f.preprod : f.committed;
+    var isDeployed = !!deployedFeatures[idx];
+    var statusBadge = isDeployed
+      ? '<span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">✓ Deployed</span>'
+      : '<span style="background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">Pending</span>';
+
+    var groupHeader = '';
+    if(dateVal !== lastDate){
+      lastDate = dateVal;
+      groupHeader = '<tr><td colspan="6" style="padding:6px 12px 2px;font-size:11px;font-weight:700;color:#6366f1;font-family:var(--mono);background:#f5f3ff;border-top:2px solid #c7d2fe;letter-spacing:.5px;">'+escH(dateVal)+'</td></tr>';
+    }
+
+    var rowBg = i%2===0 ? '#fff' : '#fafafa';
+    return groupHeader +
+      '<tr style="background:'+rowBg+';border-bottom:1px solid #f0f0f0;">' +
+        '<td style="padding:8px 12px;color:#111827;max-width:280px;word-break:break-word;">'+escH(f.summary)+'</td>' +
+        '<td style="padding:8px 12px;color:#374151;white-space:nowrap;">'+escH(f.qa||'—')+'</td>' +
+        '<td style="padding:8px 12px;color:#374151;white-space:nowrap;font-family:var(--mono);font-size:11.5px;">'+escH(f.preprod||'—')+'</td>' +
+        '<td style="padding:8px 12px;color:#374151;white-space:nowrap;font-family:var(--mono);font-size:11.5px;">'+escH(f.committed||'—')+'</td>' +
+        '<td style="padding:8px 12px;color:#6b7280;font-size:11.5px;">'+escH(f.services||'—')+'</td>' +
+        '<td style="padding:8px 12px;">'+statusBadge+'</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function copyDeployReport(){
+  var from  = document.getElementById('dr-from').value;
+  var to    = document.getElementById('dr-to').value;
+  var field = document.getElementById('dr-datefield').value === 'preprod' ? 'Preprod' : 'Committed Prod';
+  var rows  = Array.from(document.getElementById('dr-tbody').querySelectorAll('tr'))
+    .filter(function(r){ return r.cells.length === 6; });
+  var lines = ['Deployment Report — '+field+' from '+from+' to '+to, ''];
+  lines.push(['Feature / Ticket','QA Owner','Preprod','Committed Prod','Services','Status'].join('	'));
+  rows.forEach(function(r){
+    lines.push(Array.from(r.cells).map(function(c){ return c.innerText.trim(); }).join('	'));
+  });
+  navigator.clipboard.writeText(lines.join('\\n')).then(function(){
+    var btn = event.target; btn.textContent='✓ Copied!';
+    setTimeout(function(){ btn.textContent='⎘ Copy'; }, 2000);
+  });
+}
+
+function exportDeployReport(){
+  var from  = document.getElementById('dr-from').value;
+  var to    = document.getElementById('dr-to').value;
+  var field = document.getElementById('dr-datefield').value;
+  var qaFilter = document.getElementById('dr-qa').value.toLowerCase();
+
+  var fromD = from ? new Date(from) : null;
+  var toD   = to   ? new Date(to)   : null;
+  if(toD) toD.setHours(23,59,59,999);
+
+  var results = FEATURES_DATA.filter(function(f){
+    if(!f.summary||!f.summary.trim()) return false;
+    var d = parseDR(field==='preprod'?f.preprod:f.committed);
+    if(!d) return false;
+    if(fromD && d < fromD) return false;
+    if(toD   && d > toD)   return false;
+    if(qaFilter && !(f.qa||'').toLowerCase().includes(qaFilter)) return false;
+    return true;
+  });
+
+  var csv = ['Feature / Ticket,QA Owner,Preprod Date,Committed Prod Date,Services,Automation,Status'];
+  results.forEach(function(f, i){
+    var idx = FEATURES_DATA.indexOf(f);
+    var status = deployedFeatures[idx] ? 'Deployed' : 'Pending';
+    csv.push([f.summary,f.qa||'',f.preprod||'',f.committed||'',f.services||'',f.automation||'',status]
+      .map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(','));
+  });
+
+  var blob = new Blob([csv.join('\n')], {type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'deployment-report-'+from+'-to-'+to+'.csv';
+  a.click();
+}
+
 </script>
+
+<!-- DEPLOYMENT REPORT MODAL -->
+<div id="deploy-report-overlay" onclick="if(event.target===this)closeDeployReport()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;width:min(820px,96vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;">
+    <!-- Header -->
+    <div style="padding:16px 20px;background:linear-gradient(135deg,#4f46e5,#6366f1);display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-family:var(--sans);font-size:15px;font-weight:700;color:#fff;">📋 Deployment Report</span>
+      <button onclick="closeDeployReport()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:16px;line-height:1;">✕</button>
+    </div>
+    <!-- Filters -->
+    <div style="padding:14px 20px;background:#f8fafc;border-bottom:1px solid #e2e6ed;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:12px;font-weight:600;color:#374151;font-family:var(--sans);">From</label>
+        <input type="date" id="dr-from" style="padding:6px 10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;font-family:var(--mono);" onchange="renderDeployReport()">
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:12px;font-weight:600;color:#374151;font-family:var(--sans);">To</label>
+        <input type="date" id="dr-to" style="padding:6px 10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;font-family:var(--mono);" onchange="renderDeployReport()">
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:12px;font-weight:600;color:#374151;font-family:var(--sans);">Filter by</label>
+        <select id="dr-datefield" onchange="renderDeployReport()" style="padding:6px 10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;font-family:var(--sans);">
+          <option value="committed">Committed Prod Date</option>
+          <option value="preprod">Preprod Date</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:12px;font-weight:600;color:#374151;font-family:var(--sans);">QA Owner</label>
+        <select id="dr-qa" onchange="renderDeployReport()" style="padding:6px 10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;font-family:var(--sans);">
+          <option value="">All</option>
+        </select>
+      </div>
+      <button onclick="copyDeployReport()" style="margin-left:auto;padding:6px 14px;border-radius:6px;background:#4f46e5;color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);">⎘ Copy</button>
+      <button onclick="exportDeployReport()" style="padding:6px 14px;border-radius:6px;background:#0ea5e9;color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);">↓ CSV</button>
+    </div>
+    <!-- Summary strip -->
+    <div id="dr-summary" style="padding:8px 20px;background:#eef2ff;border-bottom:1px solid #c7d2fe;font-size:12px;font-family:var(--mono);color:#4f46e5;"></div>
+    <!-- Results table -->
+    <div style="overflow:auto;flex:1;">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;font-family:var(--sans);">
+        <thead id="dr-thead" style="position:sticky;top:0;background:#f1f5f9;z-index:1;">
+          <tr>
+            <th style="padding:9px 12px;text-align:left;border-bottom:2px solid #e2e6ed;color:#374151;font-weight:600;min-width:260px;">Feature / Ticket</th>
+            <th style="padding:9px 12px;text-align:left;border-bottom:2px solid #e2e6ed;color:#374151;font-weight:600;">QA Owner</th>
+            <th style="padding:9px 12px;text-align:left;border-bottom:2px solid #e2e6ed;color:#374151;font-weight:600;">Preprod</th>
+            <th style="padding:9px 12px;text-align:left;border-bottom:2px solid #e2e6ed;color:#374151;font-weight:600;">Committed Prod</th>
+            <th style="padding:9px 12px;text-align:left;border-bottom:2px solid #e2e6ed;color:#374151;font-weight:600;">Services</th>
+            <th style="padding:9px 12px;text-align:left;border-bottom:2px solid #e2e6ed;color:#374151;font-weight:600;">Status</th>
+          </tr>
+        </thead>
+        <tbody id="dr-tbody"></tbody>
+      </table>
+      <div id="dr-empty" style="display:none;padding:40px;text-align:center;color:#9ca3af;font-family:var(--sans);font-size:13px;">No features match the selected date range.</div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
