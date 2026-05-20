@@ -946,7 +946,9 @@ function init(){
           // This cleans up old GAS data that duplicates seeded spans
           function normT(t){ return String(t||'').replace(/\s+/g,' ').trim(); }
           var seeded = (MEMBER_SPANS[mid]||[]).some(function(ms){
-            return normT(ms.text)===normT(text);
+            var a = normT(ms.text), b = normT(text);
+            // Match exact, or one starts with the other (handles truncation in GAS)
+            return a===b || a.substring(0,60)===b.substring(0,60) || a.startsWith(b) || b.startsWith(a);
           });
           if(seeded) return;
           if(!newCustomSpans[mid]) newCustomSpans[mid] = [];
@@ -966,6 +968,17 @@ function init(){
           });
         });
 
+        // Final dedup pass: remove exact duplicates within each member's custom spans
+        Object.keys(newCustomSpans).forEach(function(mid){
+          var seen = {};
+          newCustomSpans[mid] = (newCustomSpans[mid]||[]).filter(function(s){
+            var key = (s.text||'').trim() + '|' + s.start;
+            if(seen[key]) return false;
+            seen[key] = true;
+            return true;
+          });
+          if(!newCustomSpans[mid].length) delete newCustomSpans[mid];
+        });
         customSpans = newCustomSpans;
         console.log('Loaded spans from GAS:', data.spans.length);
       }
@@ -1011,8 +1024,7 @@ function init(){
         });
         console.log('Applied GAS edits onto', FEATURES_DATA.length, 'seed features');
       } else {
-        console.log('GAS Features sheet empty — showing seed data, pushing to GAS');
-        pushAllToGas();
+        console.log('GAS Features sheet empty — showing seed data');
       }
 
       // Audit log
@@ -1037,14 +1049,7 @@ function init(){
         promptIdentity();
       }
 
-      // Auto-push if Features sheet looks sparse (deployed column all blank)
-      // This self-heals for anyone whose GAS sheet was never fully populated
-      var deployedInGas = (data.features||[]).filter(function(f){ return f.deployed==='1'; }).length;
-      var deployedLocally = Object.keys(deployedFeatures).length;
-      if(deployedLocally > 0 && deployedInGas === 0){
-        console.log('GAS has no deployed status but local does — pushing all to GAS');
-        pushAllToGas();
-      }
+      // Auto-push removed — only Save button triggers pushAllToGas to avoid race conditions
 
       // Poll GAS every 60s so all users see each other's changes without reloading
       if(!window._gasPoller){
@@ -1076,7 +1081,9 @@ function init(){
                 if(s.start && s.start.length > 10) s.start = s.start.substring(0,10);
                 if(s.end && s.end.length > 10) s.end = s.end.substring(0,10);
                 var isSeeded = (MEMBER_SPANS[s.memberId]||[]).some(function(ms){
-                  return ms.text===s.text && ms.start===s.start;
+                  var a = (ms.text||'').replace(/\s+/g,' ').trim();
+                  var b = (s.text||'').replace(/\s+/g,' ').trim();
+                  return a===b || a.substring(0,60)===b.substring(0,60) || a.startsWith(b) || b.startsWith(a);
                 });
                 if(!isSeeded){
                   if(!newCustom[s.memberId]) newCustom[s.memberId]=[];
@@ -1187,10 +1194,18 @@ function render(){
   var bodyHtml = '';
   members.forEach(function(m){
     var deletedSeeds = JSON.parse(localStorage.getItem('qa_deleted_seeds')||'[]');
+    var _seenSpanKeys = {};
     var allSpans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[])
       .filter(function(s){
         // Remove any seeded span the manager has deleted
         return !deletedSeeds.some(function(d){ return d.mid===m.id && d.start===s.start && d.text===s.text; });
+      })
+      .filter(function(s){
+        // Deduplicate by text+start — seeded spans always win (they come first in concat)
+        var key = (s.text||'').replace(/\s+/g,' ').trim().substring(0,60) + '|' + s.start;
+        if(_seenSpanKeys[key]) return false;
+        _seenSpanKeys[key] = true;
+        return true;
       })
       .filter(function(s){ return s.end >= viewStart && s.start <= viewEnd; });
 
@@ -1622,7 +1637,11 @@ function renderAvailability(){
   var deletedSeeds = JSON.parse(localStorage.getItem('qa_deleted_seeds')||'[]');
   members.forEach(function(m){
     busyMap[m.id] = {};
+    var _seenKeys2 = {};
     var allSpans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]).filter(function(s){
+      var k = (s.text||'').trim().substring(0,60)+'|'+s.start;
+      if(_seenKeys2[k]) return false; _seenKeys2[k]=true; return true;
+    }).filter(function(s){
       return !deletedSeeds.some(function(d){ return d.mid===m.id && d.start===s.start && d.text===s.text; });
     });
     allSpans.forEach(function(span){
