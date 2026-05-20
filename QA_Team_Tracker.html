@@ -1259,6 +1259,7 @@ function render(){
         d2.setDate(d2.getDate()+1);
       }
       if(colCount < 1) return;
+      if(!(span.text||'').trim()) return; // skip blank-text spans
 
       var chipW  = colCount * 110 - 6;
       var top    = span._lane * 28 + 4;
@@ -1880,6 +1881,7 @@ function importCalendarExcel(e){
           var text = String(raw).trim();
           // Keep multiline cells as a single span — don't split into separate tasks
           var cleaned = text.replace(/\r/g,'').trim();
+          if(!cleaned) return; // skip blank/whitespace cells
           cells.push({dateStr: dateMap[ci], text: cleaned});
         });
 
