@@ -227,7 +227,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
     </div>
     <div style="width:1px;height:18px;background:rgba(255,255,255,.12);margin:0 3px;"></div>
     <button class="btn btn-ghost" id="btn-members" onclick="openMemberMgr()">⚙ Members</button>
-    <button class="btn btn-ghost" id="btn-gas" onclick="openGasSettings()" ondblclick="diagGas()" title="Connect to Google Sheets | Double-click to diagnose">⛅ Sheets</button>
+    <button class="btn btn-ghost" id="btn-gas" onclick="openGasSettings()" title="Connect to Google Sheets">⛅ Sheets</button>
+    <button class="btn btn-ghost" id="btn-diag" onclick="diagGas()" title="Diagnose GAS connection" style="font-size:11px;padding:0 8px;">🔍 Diag</button>
     <button class="btn btn-primary" id="btn-cal-sync" onclick="syncCalendarToGas()" style="display:none;">↑ Sync</button>
     <label id="btn-cal-upload" class="btn btn-ghost" style="cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,.15)';this.style.color='#fff'" onmouseout="this.style.background='rgba(255,255,255,.08)';this.style.color='rgba(255,255,255,.75)'">
       ↑ Import
