@@ -947,8 +947,11 @@ function init(){
           function normT(t){ return String(t||'').replace(/\s+/g,' ').trim(); }
           var seeded = (MEMBER_SPANS[mid]||[]).some(function(ms){
             var a = normT(ms.text), b = normT(text);
-            // Match exact, or one starts with the other (handles truncation in GAS)
-            return a===b || a.substring(0,60)===b.substring(0,60) || a.startsWith(b) || b.startsWith(a);
+            // Exact match = definitely seeded
+            if(a === b) return true;
+            // Substring match — only seeded if start date also matches (prevents "ZCF-2002" matching "ZCF-2002 BE")
+            if(a.substring(0,60) === b.substring(0,60)) return ms.start === s.start;
+            return false;
           });
           if(seeded) return;
           if(!newCustomSpans[mid]) newCustomSpans[mid] = [];
@@ -1083,7 +1086,9 @@ function init(){
                 var isSeeded = (MEMBER_SPANS[s.memberId]||[]).some(function(ms){
                   var a = (ms.text||'').replace(/\s+/g,' ').trim();
                   var b = (s.text||'').replace(/\s+/g,' ').trim();
-                  return a===b || a.substring(0,60)===b.substring(0,60) || a.startsWith(b) || b.startsWith(a);
+                  if(a === b) return true;
+                  if(a.substring(0,60) === b.substring(0,60)) return ms.start === s.start;
+                  return false;
                 });
                 if(!isSeeded){
                   if(!newCustom[s.memberId]) newCustom[s.memberId]=[];
@@ -1202,7 +1207,7 @@ function render(){
       })
       .filter(function(s){
         // Deduplicate by text+start — seeded spans always win (they come first in concat)
-        var key = (s.text||'').replace(/\s+/g,' ').trim().substring(0,60) + '|' + s.start;
+        var key = (s.text||'').replace(/\s+/g,' ').trim() + '|' + s.start;
         if(_seenSpanKeys[key]) return false;
         _seenSpanKeys[key] = true;
         return true;
