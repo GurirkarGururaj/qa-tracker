@@ -961,7 +961,8 @@ function init(){
       // Features — SEED is always the base. GAS only overlays user edits.
       // Start fresh from seed every time, then apply any saved edits from GAS on top.
       FEATURES_DATA = JSON.parse(JSON.stringify(FEATURES_SEED));
-      deployedFeatures = {};
+      // Preserve deployedFeatures from localStorage — GAS will only overwrite if it has an explicit value
+      var localDeployed = JSON.parse(JSON.stringify(deployedFeatures));
       effortData = {};
       commentsData = {};
       bugsData = {};
@@ -984,6 +985,8 @@ function init(){
           if(f.comments)  { FEATURES_DATA[seedIdx].comments  = f.comments;  commentsData[seedIdx] = f.comments; }
           if(f.notes)     { bugsData[seedIdx] = f.notes; }
           if(f.deployed === '1' || f.deployed === 'true') deployedFeatures[seedIdx] = true;
+          else if(f.deployed === '0' || f.deployed === 'false') delete deployedFeatures[seedIdx];
+          else if(localDeployed[seedIdx]) deployedFeatures[seedIdx] = true; // keep localStorage value
           if(f.qa)        FEATURES_DATA[seedIdx].qa        = f.qa;
           if(f.preprod)   FEATURES_DATA[seedIdx].preprod   = fmtDate(f.preprod);
           if(f.committed) FEATURES_DATA[seedIdx].committed = fmtDate(f.committed);
@@ -2479,7 +2482,7 @@ function exportDeployReport(){
 
 <!-- DEPLOYMENT REPORT MODAL -->
 <div id="deploy-report-overlay" onclick="if(event.target===this)closeDeployReport()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:12px;width:min(820px,96vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;">
+  <div style="background:#fff;border-radius:12px;width:min(1100px,97vw);max-height:95vh;height:95vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;">
     <!-- Header -->
     <div style="padding:16px 20px;background:linear-gradient(135deg,#4f46e5,#6366f1);display:flex;align-items:center;justify-content:space-between;">
       <span style="font-family:var(--sans);font-size:15px;font-weight:700;color:#fff;">📋 Deployment Report</span>
