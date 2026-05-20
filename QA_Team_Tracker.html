@@ -980,7 +980,12 @@ function init(){
       bugsData = {};
 
       if(data.features && data.features.length){
-        data.features.forEach(function(f){
+        // Deduplicate GAS rows — keep last occurrence of each id (most recent save wins)
+        var deduped = {};
+        data.features.forEach(function(f){ if(f.id) deduped[f.id] = f; });
+        var uniqueFeats = Object.values ? Object.values(deduped) : Object.keys(deduped).map(function(k){ return deduped[k]; });
+
+        uniqueFeats.forEach(function(f){
           if(!f.summary || !f.summary.trim()) return;
           // Match GAS row back to seed row by summary text
           var seedIdx = FEATURES_DATA.findIndex(function(s){
