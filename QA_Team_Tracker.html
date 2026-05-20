@@ -2349,7 +2349,8 @@ function renderDeployReport(){
 
   var fromD = from ? new Date(from) : null;
   var toD   = to   ? new Date(to)   : null;
-  if(toD) toD.setHours(23,59,59,999); // inclusive end
+  if(fromD) fromD.setHours(0,0,0,0);
+  if(toD)   toD.setHours(23,59,59,999); // inclusive end
 
   var results = FEATURES_DATA.filter(function(f, idx){
     if(!f.summary || !f.summary.trim()) return false;
@@ -2444,7 +2445,8 @@ function exportDeployReport(){
 
   var fromD = from ? new Date(from) : null;
   var toD   = to   ? new Date(to)   : null;
-  if(toD) toD.setHours(23,59,59,999);
+  if(fromD) fromD.setHours(0,0,0,0);
+  if(toD)   toD.setHours(23,59,59,999);
 
   var results = FEATURES_DATA.filter(function(f){
     if(!f.summary||!f.summary.trim()) return false;
