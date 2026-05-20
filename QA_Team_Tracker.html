@@ -1478,14 +1478,12 @@ function deleteFeatureRow(idx){
   if(!confirm('Delete this feature row? This cannot be undone.')) return;
   var f = FEATURES_DATA[idx]||{};
   logChange(f.summary||'Feature '+idx, 'Row Deleted', f.summary||'', '');
-  // Remove from FEATURES_DATA
-  FEATURES_DATA.splice(idx, 1);
-  // Remove associated data
+  // Mark as blank rather than splicing — preserves feat_N indices in GAS
+  FEATURES_DATA[idx] = {summary:'', qa:'', effort:'', preprod:'', committed:'', comments:'', services:'', automation:'—'};
   delete deployedFeatures[idx];
   delete bugsData[idx];
   delete effortData[idx];
   delete commentsData[idx];
-  // Delete from GAS
   if(GAS_URL){
     gasCall('deleteFeature', {id: 'feat_'+idx});
     gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:f.summary||'', field:'Row Deleted', oldVal:f.summary||'', newVal:''});
@@ -1563,8 +1561,14 @@ function onFieldBlur(idx, field, el){
 
 function toggleDeploy(idx){
   deployedFeatures[idx] = !deployedFeatures[idx];
+  var f = FEATURES_DATA[idx]||{};
+  var newStatus = deployedFeatures[idx] ? 'Deployed' : 'Pending';
+  logChange(f.summary||'Feature '+idx, 'Status', deployedFeatures[idx]?'Pending':'Deployed', newStatus);
   localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
-  if(GAS_URL){ var f=FEATURES_DATA[idx]||{}; gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',comments:f.comments||'',services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}}); }
+  if(GAS_URL){
+    gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',comments:f.comments||'',services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'0',notes:bugsData[idx]||''}});
+    gasCall('logAudit',{ts:new Date().toISOString(),user:getIdentity(),feature:f.summary||'',field:'Status',oldVal:deployedFeatures[idx]?'Pending':'Deployed',newVal:newStatus});
+  }
   renderFeatures();
 }
 
@@ -2067,118 +2071,7 @@ function saveBugNotes(idx, val){
 }
 
 
-function sortFt(col){
-  if(ftSortCol===col){
-    if(!ftSortAsc){ ftSortCol='none'; ftSortAsc=true; } // third click = reset to original order
-    else ftSortAsc=false;
-  } else { ftSortCol=col; ftSortAsc=true; }
-  document.getElementById('s-preprod').textContent   = ftSortCol==='preprod'   ?(ftSortAsc?'↑':'↓'):'';
-  document.getElementById('s-committed').textContent = ftSortCol==='committed' ?(ftSortAsc?'↑':'↓'):'';
-  renderFeatures();
-}
 
-function saveEffort(idx, val){
-  effortData[idx] = val;
-  if(FEATURES_DATA[idx]) FEATURES_DATA[idx].effort = val;
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
-}
-
-
-function onEffortBlur(idx, el){
-  var val = el.innerText.trim();
-  var old = FEATURES_DATA[idx] ? (FEATURES_DATA[idx].effort||'') : '';
-  if(val !== old){
-    logChange(FEATURES_DATA[idx]?FEATURES_DATA[idx].summary:'', 'Effort', old, val);
-    if(GAS_URL){ var f=FEATURES_DATA[idx]||{}; gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:val,preprod:f.preprod||'',committed:f.committed||'',comments:f.comments||'',services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}}); }
-  }
-  saveEffort(idx, val);
-}
-
-function saveComments(idx, val){
-  commentsData[idx] = val;
-  if(FEATURES_DATA[idx]) FEATURES_DATA[idx].comments = val;
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
-}
-
-function onCommentsBlur(idx, el){
-  var val = el.innerText.trim();
-  var old = FEATURES_DATA[idx] ? (FEATURES_DATA[idx].comments||'') : '';
-  if(val !== old){
-    logChange(FEATURES_DATA[idx]?FEATURES_DATA[idx].summary:'', 'Comments', old, val);
-    if(GAS_URL){ var f=FEATURES_DATA[idx]||{}; gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',comments:val,services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}}); }
-  }
-  saveComments(idx, val);
-}
-
-function toggleDeploy(idx){
-  deployedFeatures[idx] = !deployedFeatures[idx];
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
-  if(GAS_URL){ var f=FEATURES_DATA[idx]||{}; gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',comments:f.comments||'',services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}}); }
-  renderFeatures();
-}
-
-
-// ═══════════════ AUDIT LOG ════════════════════════════════════════════════════
-function saveIdentity(){
-  var val = document.getElementById('user-identity').value.trim();
-  localStorage.setItem('qa_user_identity', val);
-}
-function getIdentity(){
-  return localStorage.getItem('qa_user_identity') || document.getElementById('user-identity')?.value.trim() || 'Unknown';
-}
-
-function logChange(featureSummary, field, oldVal, newVal){
-  var entry = {
-    ts: new Date().toISOString(),
-    user: getIdentity(),
-    feature: featureSummary,
-    field: field,
-    oldVal: String(oldVal||'—'),
-    newVal: String(newVal||'—')
-  };
-  auditLog.unshift(entry);
-  if(auditLog.length > 500) auditLog.length = 500;
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
-}
-
-function renderAudit(){
-  var tbody = document.getElementById('audit-tbody');
-  var empty = document.getElementById('audit-empty');
-  if(!auditLog.length){ tbody.innerHTML=''; empty.style.display='block'; return; }
-  empty.style.display='none';
-  tbody.innerHTML = auditLog.map(function(e){
-    return '<tr style="border-bottom:1px solid #e5e7eb;">'
-      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-family:monospace;font-size:11.5px;color:#6b7280;white-space:nowrap;">'+e.ts+'</td>'
-      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12px;color:#2563eb;font-weight:600;white-space:nowrap;">'+escH(e.user||'—')+'</td>'
-      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12.5px;font-weight:500;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escH(e.feature)+'</td>'
-      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12px;color:#2563eb;font-weight:600;">'+escH(e.field)+'</td>'
-      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12px;color:#dc2626;max-width:180px;">'+escH(e.oldVal)+'</td>'
-      +'<td style="padding:9px 12px;border:1px solid #e5e7eb;font-size:12px;color:#16a34a;max-width:180px;">'+escH(e.newVal)+'</td>'
-      +'</tr>';
-  }).join('');
-}
-
-function clearAudit(){
-  auditLog = [];
-  localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
-  renderAudit();
-}
-
-// ═══════════════ EXCEL UPSERT ════════════════════════════════════════════════
-
-// ═══════════════ BUGS PER FEATURE ════════════════════════════════════════════
-function toggleBugs(idx){
-  var el = document.getElementById('bugs-row-'+idx);
-  if(!el) return;
-  var isHidden = el.style.display === 'none';
-  el.style.display = isHidden ? 'table-row' : 'none';
-  var btn = document.getElementById('bugs-btn-'+idx);
-  if(btn){
-    var notes = bugsData[idx]||'';
-    var hasNotes = typeof notes === 'string' ? notes.trim().length > 0 : notes.length > 0;
-    btn.textContent = isHidden ? ('▾ Notes'+(hasNotes?' ✎':'')) : ('▸ Notes'+(hasNotes?' ✎':''));
-  }
-}
 
 function addBug(idx){
   var idEl  = document.getElementById('new-bug-id-'+idx);
