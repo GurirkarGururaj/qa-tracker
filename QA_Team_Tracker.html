@@ -1764,7 +1764,7 @@ function importCalendarExcel(e){
     try{
       var wb = XLSX.read(ev.target.result, {
         type: file.name.endsWith('.csv') ? 'string' : 'array',
-        cellDates: true
+        cellDates: false
       });
 
       // Pick sheet: try current month name, then MAY, then first
@@ -1814,7 +1814,11 @@ function importCalendarExcel(e){
       headerRow.forEach(function(val, ci){
         if(!val) return;
         var d = null;
-        if(val instanceof Date){ d = val; }
+        if(val instanceof Date){
+          // Use UTC to avoid IST timezone shift
+          dateMap[ci] = val.getUTCFullYear()+'-'+String(val.getUTCMonth()+1).padStart(2,'0')+'-'+String(val.getUTCDate()).padStart(2,'0');
+          return;
+        }
         else if(typeof val === 'number'){
           // Excel serial date — use UTC to avoid timezone shift (e.g. IST = UTC+5:30)
           var utcMs = Math.round((val - 25569) * 86400 * 1000);
