@@ -1095,6 +1095,13 @@ function init(){
               });
               customSpans = newCustom;
             }
+            // Also update audit log from GAS
+            if(d.auditLog && d.auditLog.length){
+              auditLog = d.auditLog.map(function(r){
+                return {ts:r.ts||'', user:r.user||'', feature:r.feature||'', field:r.field||'', oldVal:r.oldVal||'', newVal:r.newVal||''};
+              });
+              localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
+            }
             render();
             if(currentTab==='audit') renderAudit();
           });
