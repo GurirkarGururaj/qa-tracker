@@ -1664,7 +1664,19 @@ function renderAvailability(){
     });
   });
 
-  var h = '<div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
+  // Daily view comes first
+  var h = '<div id="daily-view-section" style="margin-bottom:32px;">'
+    + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;">'
+    + '<span style="font-size:14px;font-weight:700;color:var(--txt);">📋 Who is working on what</span>'
+    + '<button onclick="setDailyDate(\'today\')" style="padding:6px 14px;border-radius:6px;background:#3b82f6;color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;">Today</button>'
+    + '<input type="date" id="daily-date-picker" onchange="renderDailyView()" style="padding:6px 10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;font-family:var(--mono);">'
+    + '<span id="daily-view-label" style="font-size:12px;color:#6b7280;font-family:var(--mono);"></span>'
+    + '</div>'
+    + '<div id="daily-view-content"></div>'
+    + '</div>';
+
+  // Then the 2-week availability grid below
+  h += '<div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
     + '<span style="font-size:13px;font-weight:600;color:var(--txt);">Resource availability — current 2-week window</span>'
     + '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#dcfce7;color:#16a34a;border:1px solid #86efac;">● Available</span>'
     + '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;">● Busy</span>'
@@ -1702,35 +1714,9 @@ function renderAvailability(){
   });
   h += '</tbody></table></div>';
 
-  // Daily summary cards
-  h += '<div style="margin-top:24px;"><div style="font-size:13px;font-weight:600;margin-bottom:12px;">📊 Who is free each day</div>';
-  h += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
-  dates.forEach(function(d){
-    if(d.getDay()===0||d.getDay()===6) return;
-    var today = ds(d)===ds(new Date());
-    var avail = members.filter(function(m){ return !busyMap[m.id][ds(d)]; });
-    h += '<div style="background:'+(today?'#eff6ff':'#f8fafc')+';border:1px solid '+(today?'#3b82f6':'#e2e8f0')+';border-radius:8px;padding:10px 14px;min-width:130px;">';
-    h += '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">'+DAYS_SHORT[d.getDay()]+' '+d.getDate()+' '+MONTHS_SHORT[d.getMonth()]+'</div>';
-    if(avail.length){
-      h += '<div style="font-size:11px;color:#16a34a;font-weight:600;margin-bottom:3px;">Free: '+avail.length+'</div>';
-      avail.forEach(function(m){ h += '<div style="font-size:11px;color:#374151;">'+escH(m.name)+'</div>'; });
-    } else {
-      h += '<div style="font-size:11px;color:#9ca3af;font-style:italic;">All busy</div>';
-    }
-    h += '</div>';
-  });
-  h += '</div></div>';
 
-  // Append daily view section
-  h += '<div id="daily-view-section" style="margin-top:32px;border-top:2px solid #e2e8f0;padding-top:24px;">'
-    + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;">'
-    + '<span style="font-size:14px;font-weight:700;color:var(--txt);">📋 Who is working on what</span>'
-    + '<button onclick="setDailyDate(\'today\')" style="padding:6px 14px;border-radius:6px;background:#3b82f6;color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;">Today</button>'
-    + '<input type="date" id="daily-date-picker" onchange="renderDailyView()" style="padding:6px 10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;font-family:var(--mono);">'
-    + '<span id="daily-view-label" style="font-size:12px;color:#6b7280;font-family:var(--mono);"></span>'
-    + '</div>'
-    + '<div id="daily-view-content"></div>'
-    + '</div>';
+
+
 
   container.innerHTML = h;
 
