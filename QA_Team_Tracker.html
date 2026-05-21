@@ -754,7 +754,7 @@ function pushSequential(action, key, records){
 function pushAllToGas(){
   var p1 = gasCall('saveMembers', {members: members});
 
-  // Features — single replaceFeatures call (fast batch write on server)
+  // Features — upsert each row (never replace whole sheet — would wipe other users' edits)
   var allFeats = FEATURES_DATA.map(function(f, i){
     return {
       id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:effortData[i]||f.effort||'',
@@ -763,56 +763,40 @@ function pushAllToGas(){
       deployed:deployedFeatures[i]?'1':'0', notes:bugsData[i]||''
     };
   }).filter(function(f){ return (f.summary||'').trim(); });
-  // Send in chunks of 10 to stay within URL limit; first = replace, rest = append
-  var FCHUNK2 = 10, featChain = Promise.resolve();
+  var FCHUNK2 = 5, featChain = Promise.resolve();
   for(var fi2 = 0; fi2 < allFeats.length; fi2 += FCHUNK2){
-    (function(chunk, isFirst){
+    (function(chunk){
       featChain = featChain.then(function(){
-        return gasCall(isFirst ? 'replaceFeatures' : 'appendFeatures', {features: chunk});
+        return Promise.all(chunk.map(function(feat){
+          return gasCall('saveFeature', {feature: feat});
+        }));
       });
-    })(allFeats.slice(fi2, fi2+FCHUNK2), fi2 === 0);
+    })(allFeats.slice(fi2, fi2+FCHUNK2));
   }
-  if(allFeats.length === 0) featChain = gasCall('replaceFeatures', {features: []});
   var p2 = featChain;
 
-  // Spans — push ALL spans (seeded + custom), deduplicated
-  var allSpans = [];
+  // Spans — upsert only custom spans (never replace whole sheet — would wipe other users' data)
+  // Seeded spans are always in HTML; only custom (user-added) spans need GAS persistence
+  var spanChain = Promise.resolve();
+  var spanCount = 0;
   members.forEach(function(m){
-    var seen = {};
-    (MEMBER_SPANS[m.id]||[]).forEach(function(s){
-      if(!(s.text||'').trim()) return;
-      var start = s.start ? String(s.start).substring(0,10) : s.start;
-      var end = s.end ? String(s.end).substring(0,10) : s.end;
-      if(/^\d{4}-\d{2}-\d{2}$/.test(start)){
-        var sid = spanId(m.id,{text:s.text,start:start});
-        seen[sid]=true;
-        allSpans.push({id:sid, memberId:m.id, text:s.text, type:s.type, start:start, end:end});
-      }
-    });
     (customSpans[m.id]||[]).forEach(function(s){
       if(!(s.text||'').trim()) return;
       var start = s.start ? String(s.start).substring(0,10) : s.start;
       var end = s.end ? String(s.end).substring(0,10) : s.end;
       if(/^\d{4}-\d{2}-\d{2}$/.test(start)){
         var sid = spanId(m.id,{text:s.text,start:start});
-        if(!seen[sid]){ seen[sid]=true; allSpans.push({id:sid, memberId:m.id, text:s.text, type:s.type, start:start, end:end}); }
+        var span = {id:sid, memberId:m.id, text:s.text, type:s.type, start:start, end:end};
+        spanChain = spanChain.then(function(){ return gasCall('saveSpan', {span:span}); });
+        spanCount++;
       }
     });
   });
-  var SCHUNK = 20, spanChain = Promise.resolve();
-  for(var si = 0; si < allSpans.length; si += SCHUNK){
-    (function(chunk, isFirst){
-      spanChain = spanChain.then(function(){
-        return gasCall(isFirst ? 'replaceSpans' : 'appendSpans', {spans: chunk});
-      });
-    })(allSpans.slice(si, si+SCHUNK), si === 0);
-  }
-  if(allSpans.length === 0) spanChain = gasCall('replaceSpans', {spans: []});
   var p3 = spanChain;
 
   var deployedCount = allFeats.filter(function(f){ return f.deployed==='1'; }).length;
   return Promise.all([p1, p2, p3]).then(function(){
-    var msg = '✓ Saved: '+allFeats.length+' features ('+deployedCount+' deployed), '+allSpans.length+' spans';
+    var msg = '✓ Saved: '+allFeats.length+' features ('+deployedCount+' deployed), '+spanCount+' custom spans';
     console.log(msg);
     showSyncStatus(msg, true);
   });
