@@ -1740,7 +1740,24 @@ function renderAvailability(){
   });
   h += '</div></div>';
 
+  // Append daily view section
+  h += '<div id="daily-view-section" style="margin-top:32px;border-top:2px solid #e2e8f0;padding-top:24px;">'
+    + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;">'
+    + '<span style="font-size:14px;font-weight:700;color:var(--txt);">📋 Who is working on what</span>'
+    + '<button onclick="setDailyDate(\'today\')" style="padding:6px 14px;border-radius:6px;background:#3b82f6;color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;">Today</button>'
+    + '<input type="date" id="daily-date-picker" onchange="renderDailyView()" style="padding:6px 10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;font-family:var(--mono);">'
+    + '<span id="daily-view-label" style="font-size:12px;color:#6b7280;font-family:var(--mono);"></span>'
+    + '</div>'
+    + '<div id="daily-view-content"></div>'
+    + '</div>';
+
   container.innerHTML = h;
+
+  // Set default date to today and render
+  var todayStr = ds(new Date());
+  var picker = document.getElementById('daily-date-picker');
+  if(picker && !picker.value) picker.value = todayStr;
+  renderDailyView();
 }
 
 function fmtTs(ts){
@@ -2594,6 +2611,150 @@ function diagGas(){
     });
     box.textContent += '\n\n[Click outside to close]';
   });
+}
+
+
+// ═══════════════════════ DAILY WORK VIEW ════════════════════════════════════
+
+function setDailyDate(val){
+  var picker = document.getElementById('daily-date-picker');
+  if(!picker) return;
+  if(val === 'today') picker.value = ds(new Date());
+  else picker.value = val;
+  renderDailyView();
+}
+
+function renderDailyView(){
+  var picker = document.getElementById('daily-date-picker');
+  var content = document.getElementById('daily-view-content');
+  var label = document.getElementById('daily-view-label');
+  if(!picker || !content) return;
+
+  var dateStr = picker.value;
+  if(!dateStr) return;
+
+  var d = new Date(dateStr + 'T00:00:00');
+  var DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var isToday = dateStr === ds(new Date());
+  var isWknd = d.getDay() === 0 || d.getDay() === 6;
+
+  label.textContent = DAYS[d.getDay()] + ', ' + d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear() + (isToday ? '  — Today' : '') + (isWknd ? '  — Weekend' : '');
+
+  var deletedSeeds = JSON.parse(localStorage.getItem('qa_deleted_seeds')||'[]');
+
+  // Build work map: for each member, find all tasks on this date
+  var rows = [];
+  members.forEach(function(m){
+    var tasks = [];
+    var seen = {};
+    var allSpans = (MEMBER_SPANS[m.id]||[]).concat(customSpans[m.id]||[]);
+
+    // Dedup
+    allSpans = allSpans.filter(function(s){
+      var k = (s.text||'').trim() + '|' + s.start;
+      if(seen[k]) return false; seen[k] = true; return true;
+    });
+
+    // Filter deleted
+    allSpans = allSpans.filter(function(s){
+      return !deletedSeeds.some(function(d){ return d.mid===m.id && d.start===s.start && d.text===s.text; });
+    });
+
+    // Find spans covering this date
+    allSpans.forEach(function(s){
+      var start = s.start, end = s.end || s.start;
+      if(dateStr >= start && dateStr <= end){
+        tasks.push(s);
+      }
+    });
+
+    rows.push({member: m, tasks: tasks});
+  });
+
+  var working = rows.filter(function(r){ return r.tasks.length > 0; });
+  var free    = rows.filter(function(r){ return r.tasks.length === 0; });
+
+  var h = '';
+
+  // Summary bar
+  h += '<div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">'
+    + '<div style="padding:10px 18px;border-radius:8px;background:#fee2e2;border:1px solid #fca5a5;">'
+    + '<span style="font-size:22px;font-weight:700;color:#dc2626;">' + working.length + '</span>'
+    + '<span style="font-size:12px;color:#dc2626;margin-left:6px;font-weight:600;">Working</span></div>'
+    + '<div style="padding:10px 18px;border-radius:8px;background:#f0fdf4;border:1px solid #86efac;">'
+    + '<span style="font-size:22px;font-weight:700;color:#16a34a;">' + free.length + '</span>'
+    + '<span style="font-size:12px;color:#16a34a;margin-left:6px;font-weight:600;">Available</span></div>'
+    + '</div>';
+
+  if(working.length === 0 && isWknd){
+    h += '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">Weekend — no tasks scheduled</div>';
+    content.innerHTML = h;
+    return;
+  }
+
+  // Main table
+  h += '<div style="overflow-x:auto;">'
+    + '<table style="width:100%;border-collapse:collapse;font-family:var(--sans);font-size:13px;">'
+    + '<thead>'
+    + '<tr style="background:#f1f5f9;">'
+    + '<th style="padding:10px 14px;text-align:left;border:1px solid #e2e8f0;font-weight:600;color:#374151;min-width:130px;">Member</th>'
+    + '<th style="padding:10px 14px;text-align:left;border:1px solid #e2e8f0;font-weight:600;color:#374151;">Tasks / Tickets</th>'
+    + '<th style="padding:10px 14px;text-align:center;border:1px solid #e2e8f0;font-weight:600;color:#374151;width:90px;">Type</th>'
+    + '<th style="padding:10px 14px;text-align:center;border:1px solid #e2e8f0;font-weight:600;color:#374151;width:90px;">Span</th>'
+    + '</tr>'
+    + '</thead><tbody>';
+
+  var typeColors = {
+    feature: {bg:'#eff6ff',color:'#1d4ed8',label:'Feature'},
+    bug:     {bg:'#fef2f2',color:'#dc2626',label:'Bug Fix'},
+    leave:   {bg:'#fef9c3',color:'#92400e',label:'Leave'},
+    automation:{bg:'#f0fdf4',color:'#16a34a',label:'Auto'}
+  };
+
+  // Working members first
+  working.forEach(function(row, ri){
+    var m = row.member;
+    var rowspan = row.tasks.length;
+    row.tasks.forEach(function(task, ti){
+      var tc = typeColors[task.type] || typeColors.feature;
+      var spanDays = Math.round((new Date(task.end+'T00:00:00') - new Date(task.start+'T00:00:00'))/(86400000)) + 1;
+      var spanLabel = spanDays > 1 ? task.start.substring(5).replace('-','/') + '→' + task.end.substring(5).replace('-','/') : task.start.substring(5).replace('-','/');
+      var bg = ri % 2 === 0 ? '#fff' : '#fafafa';
+      h += '<tr style="background:'+bg+';border-bottom:1px solid #f0f0f0;">';
+      if(ti === 0){
+        h += '<td rowspan="'+rowspan+'" style="padding:10px 14px;border:1px solid #e2e8f0;vertical-align:middle;background:'+bg+';">'
+          + '<div style="display:flex;align-items:center;gap:8px;">'
+          + '<div style="width:28px;height:28px;border-radius:50%;background:'+m.color+'22;color:'+m.color+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">'+m.name.slice(0,2).toUpperCase()+'</div>'
+          + '<span style="font-weight:600;color:#111827;">'+escH(m.name)+'</span>'
+          + '</div></td>';
+      }
+      h += '<td style="padding:9px 14px;border:1px solid #e2e8f0;color:#374151;">'+escH(task.text)+'</td>'
+        + '<td style="padding:9px 14px;border:1px solid #e2e8f0;text-align:center;">'
+        + '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:'+tc.bg+';color:'+tc.color+';">'+tc.label+'</span>'
+        + '</td>'
+        + '<td style="padding:9px 14px;border:1px solid #e2e8f0;text-align:center;font-family:var(--mono);font-size:11px;color:#6b7280;">'+escH(spanLabel)+'</td>'
+        + '</tr>';
+    });
+  });
+
+  // Divider row
+  if(free.length > 0){
+    h += '<tr><td colspan="4" style="padding:8px 14px;background:#f0fdf4;border:1px solid #e2e8f0;font-size:12px;font-weight:600;color:#16a34a;">✓ Available today</td></tr>';
+    free.forEach(function(row){
+      var m = row.member;
+      h += '<tr style="background:#fafff8;">'
+        + '<td style="padding:9px 14px;border:1px solid #e2e8f0;">'
+        + '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<div style="width:28px;height:28px;border-radius:50%;background:'+m.color+'22;color:'+m.color+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">'+m.name.slice(0,2).toUpperCase()+'</div>'
+        + '<span style="font-weight:500;color:#374151;">'+escH(m.name)+'</span></div></td>'
+        + '<td colspan="3" style="padding:9px 14px;border:1px solid #e2e8f0;color:#9ca3af;font-style:italic;">No tasks scheduled</td>'
+        + '</tr>';
+    });
+  }
+
+  h += '</tbody></table></div>';
+  content.innerHTML = h;
 }
 
 </script>
