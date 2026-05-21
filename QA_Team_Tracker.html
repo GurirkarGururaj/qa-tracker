@@ -994,8 +994,10 @@ function init(){
       bugsData = {};
 
       if(data.features && data.features.length){
-        // Build FEATURES_DATA entirely from GAS — no seed dependency
-        FEATURES_DATA = [];
+        // Start from seed for instant display, then overlay GAS data
+        // This ensures the tab is never blank while GAS loads
+        var gasByIdx = {};
+        var gasExtra = []; // rows not in seed
         // Deduplicate GAS rows — keep last occurrence of each id (most recent save wins)
         var deduped = {};
         data.features.forEach(function(f){ if(f.id) deduped[f.id] = f; });
@@ -1003,21 +1005,39 @@ function init(){
 
         uniqueFeats.forEach(function(f){
           if(!f.summary || !f.summary.trim()) return;
-          var idx = FEATURES_DATA.length;
-          FEATURES_DATA.push({
-            summary:   f.summary.trim(),
-            qa:        f.qa||'',
-            effort:    f.effort||'',
-            preprod:   fmtDate(f.preprod||''),
-            committed: fmtDate(f.committed||''),
-            comments:  f.comments||'',
-            services:  f.services||'',
-            automation:f.automation||''
+          // Try to match against current FEATURES_DATA (seed-based)
+          var seedIdx = FEATURES_DATA.findIndex(function(s){
+            return s.summary && s.summary.trim().substring(0,40) === f.summary.trim().substring(0,40);
           });
-          if(f.deployed === '1' || f.deployed === 'true') deployedFeatures[idx] = true;
-          if(f.effort)   effortData[idx]   = f.effort;
-          if(f.comments) commentsData[idx] = f.comments;
-          if(f.notes)    bugsData[idx]     = f.notes;
+          if(seedIdx < 0){
+            var parsedIdx = parseInt((f.id||'').replace('feat_',''));
+            if(!isNaN(parsedIdx) && parsedIdx < FEATURES_DATA.length) seedIdx = parsedIdx;
+          }
+          if(seedIdx >= 0){
+            // Update existing seed row with GAS data
+            if(f.qa)        FEATURES_DATA[seedIdx].qa        = f.qa;
+            if(f.preprod)   FEATURES_DATA[seedIdx].preprod   = fmtDate(f.preprod);
+            if(f.committed) FEATURES_DATA[seedIdx].committed = fmtDate(f.committed);
+            if(f.comments)  { FEATURES_DATA[seedIdx].comments = f.comments; commentsData[seedIdx] = f.comments; }
+            if(f.services)  FEATURES_DATA[seedIdx].services  = f.services;
+            if(f.automation && f.automation !== '—') FEATURES_DATA[seedIdx].automation = f.automation;
+            if(f.effort)    { FEATURES_DATA[seedIdx].effort = f.effort; effortData[seedIdx] = f.effort; }
+            if(f.notes)     bugsData[seedIdx] = f.notes;
+            if(f.deployed === '1' || f.deployed === 'true') deployedFeatures[seedIdx] = true;
+            else if(f.deployed === '0' || f.deployed === 'false') delete deployedFeatures[seedIdx];
+          } else {
+            // Not in seed — append as extra row
+            var newIdx = FEATURES_DATA.length;
+            FEATURES_DATA.push({
+              summary: f.summary.trim(), qa: f.qa||'', effort: f.effort||'',
+              preprod: fmtDate(f.preprod||''), committed: fmtDate(f.committed||''),
+              comments: f.comments||'', services: f.services||'', automation: f.automation||''
+            });
+            if(f.deployed === '1') deployedFeatures[newIdx] = true;
+            if(f.effort)   effortData[newIdx]   = f.effort;
+            if(f.comments) commentsData[newIdx] = f.comments;
+            if(f.notes)    bugsData[newIdx]     = f.notes;
+          }
         });
         console.log('Loaded', FEATURES_DATA.length, 'features from GAS');
       } else {
