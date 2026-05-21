@@ -985,16 +985,17 @@ function init(){
         console.log('Loaded spans from GAS:', data.spans.length);
       }
 
-      // Features — SEED is always the base. GAS only overlays user edits.
-      // Start fresh from seed every time, then apply any saved edits from GAS on top.
-      FEATURES_DATA = JSON.parse(JSON.stringify(FEATURES_SEED));
-      // Preserve deployedFeatures from localStorage — GAS will only overwrite if it has an explicit value
+      // Features — GAS is the full source of truth when connected.
+      // Use GAS list entirely; only fall back to FEATURES_SEED if GAS is empty.
       var localDeployed = JSON.parse(JSON.stringify(deployedFeatures));
+      deployedFeatures = {};
       effortData = {};
       commentsData = {};
       bugsData = {};
 
       if(data.features && data.features.length){
+        // Build FEATURES_DATA entirely from GAS — no seed dependency
+        FEATURES_DATA = [];
         // Deduplicate GAS rows — keep last occurrence of each id (most recent save wins)
         var deduped = {};
         data.features.forEach(function(f){ if(f.id) deduped[f.id] = f; });
@@ -1002,43 +1003,23 @@ function init(){
 
         uniqueFeats.forEach(function(f){
           if(!f.summary || !f.summary.trim()) return;
-          // Match GAS row back to seed row by summary text
-          var seedIdx = FEATURES_DATA.findIndex(function(s){
-            return s.summary && s.summary.trim().substring(0,40) === f.summary.trim().substring(0,40);
+          var idx = FEATURES_DATA.length;
+          FEATURES_DATA.push({
+            summary:   f.summary.trim(),
+            qa:        f.qa||'',
+            effort:    f.effort||'',
+            preprod:   fmtDate(f.preprod||''),
+            committed: fmtDate(f.committed||''),
+            comments:  f.comments||'',
+            services:  f.services||'',
+            automation:f.automation||''
           });
-          // Also try by feat_ index as fallback
-          if(seedIdx < 0){
-            var idx = parseInt((f.id||'').replace('feat_',''));
-            if(!isNaN(idx) && FEATURES_DATA[idx]) seedIdx = idx;
-          }
-          if(seedIdx < 0){
-            // Not in seed — this is an Excel-imported feature, add it to FEATURES_DATA
-            var newIdx = FEATURES_DATA.length;
-            FEATURES_DATA.push({
-              summary: f.summary.trim(),
-              qa: f.qa||'', effort: f.effort||'', preprod: fmtDate(f.preprod||''),
-              committed: fmtDate(f.committed||''), comments: f.comments||'',
-              services: f.services||'', automation: f.automation||''
-            });
-            if(f.deployed === '1') deployedFeatures[newIdx] = true;
-            if(f.notes) bugsData[newIdx] = f.notes;
-            if(f.effort) effortData[newIdx] = f.effort;
-            if(f.comments) commentsData[newIdx] = f.comments;
-            return;
-          }
-          // Overlay edits from GAS onto seed row
-          if(f.effort)    { FEATURES_DATA[seedIdx].effort    = f.effort;    effortData[seedIdx]   = f.effort; }
-          if(f.comments)  { FEATURES_DATA[seedIdx].comments  = f.comments;  commentsData[seedIdx] = f.comments; }
-          if(f.notes)     { bugsData[seedIdx] = f.notes; }
-          if(f.deployed === '1' || f.deployed === 'true') deployedFeatures[seedIdx] = true;
-          else if(f.deployed === '0' || f.deployed === 'false' || f.deployed === '') delete deployedFeatures[seedIdx];
-          if(f.qa)        FEATURES_DATA[seedIdx].qa        = f.qa;
-          if(f.preprod)   FEATURES_DATA[seedIdx].preprod   = fmtDate(f.preprod);
-          if(f.committed) FEATURES_DATA[seedIdx].committed = fmtDate(f.committed);
-          if(f.services)  FEATURES_DATA[seedIdx].services  = f.services;
-          if(f.automation && f.automation !== '—') FEATURES_DATA[seedIdx].automation = f.automation;
+          if(f.deployed === '1' || f.deployed === 'true') deployedFeatures[idx] = true;
+          if(f.effort)   effortData[idx]   = f.effort;
+          if(f.comments) commentsData[idx] = f.comments;
+          if(f.notes)    bugsData[idx]     = f.notes;
         });
-        console.log('Applied GAS edits onto', FEATURES_DATA.length, 'features (seed + imported)');
+        console.log('Loaded', FEATURES_DATA.length, 'features from GAS');
       } else {
         console.log('GAS Features sheet empty — showing seed data');
       }
@@ -2110,29 +2091,19 @@ function upsertFromExcel(e){
       status.textContent = '✓ '+added+' added'+(added>0?' (scroll down to see new rows)':'')+', '+updated+' updated — syncing...';
       status.style.color = '#d97706';
       renderFeatures();
-      // Push ALL features to GAS in ONE bulk call
       if(GAS_URL){
-        var allFeats = FEATURES_DATA.filter(function(f){ return (f.summary||'').trim(); }).map(function(f, i){
-          var realIdx = FEATURES_DATA.indexOf(f);
-          return {id:'feat_'+realIdx, summary:f.summary||'', qa:f.qa||'', effort:effortData[realIdx]||f.effort||'',
-            preprod:f.preprod||'', committed:f.committed||'', comments:commentsData[realIdx]||f.comments||'',
-            services:f.services||'', automation:f.automation||'',
-            deployed:deployedFeatures[realIdx]?'1':'', notes:bugsData[realIdx]||''};
-        });
-        // Send in chunks of 5 to stay within JSONP URL limit
+        // Use pushAllToGas for bulk replace — faster and more reliable than individual saves
         window._importInProgress = true;
-        var featChain2 = Promise.resolve();
-        allFeats.forEach(function(feat){
-          featChain2 = featChain2.then(function(){ return gasCall('saveFeature', {feature: feat}); });
-        });
-        featChain2.then(function(){
+        pushAllToGas().then(function(){
           window._importInProgress = false;
           status.textContent = '✓ '+added+' added, '+updated+' updated — saved to Google Sheets';
           status.style.color = '#16a34a';
+          setTimeout(function(){ status.textContent=''; }, 4000);
         });
       } else {
         status.textContent = '✓ '+added+' added, '+updated+' updated';
         status.style.color = '#16a34a';
+        setTimeout(function(){ status.textContent=''; }, 3000);
       }
     }catch(err){
       status.textContent = 'Error: '+err.message;
