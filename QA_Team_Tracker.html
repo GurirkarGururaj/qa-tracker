@@ -1509,8 +1509,9 @@ function addFeatureRow(){
   if(GAS_URL){
     gasCall('saveFeature', {feature:{
       id:'feat_'+idx, summary:'', qa:'', effort:'', preprod:'', committed:'',
-      comments:'', services:'', automation:'—', deployed:'', notes:''
+      comments:'', services:'', automation:'—', deployed:'0', notes:''
     }});
+    gasCall('logAudit',{ts:new Date().toISOString(),user:getIdentity(),feature:'New feature row',field:'Row Added',oldVal:'',newVal:'(blank row - feat_'+idx+')'});
   }
   renderFeatures();
   setTimeout(function(){
@@ -1559,7 +1560,10 @@ function onEffortBlur(idx, el){
   var old = FEATURES_DATA[idx] ? (FEATURES_DATA[idx].effort||'') : '';
   if(val !== old){
     logChange(FEATURES_DATA[idx]?FEATURES_DATA[idx].summary:'', 'Effort', old, val);
-    if(GAS_URL){ var f=FEATURES_DATA[idx]||{}; gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:val,preprod:f.preprod||'',committed:f.committed||'',comments:f.comments||'',services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}}); }
+    if(GAS_URL){ var f=FEATURES_DATA[idx]||{};
+      gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:val,preprod:f.preprod||'',committed:f.committed||'',comments:f.comments||'',services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'0',notes:bugsData[idx]||''}});
+      gasCall('logAudit',{ts:new Date().toISOString(),user:getIdentity(),feature:f.summary||'',field:'Effort',oldVal:old,newVal:val});
+    }
   }
   saveEffort(idx, val);
 }
@@ -1575,7 +1579,10 @@ function onCommentsBlur(idx, el){
   var old = FEATURES_DATA[idx] ? (FEATURES_DATA[idx].comments||'') : '';
   if(val !== old){
     logChange(FEATURES_DATA[idx]?FEATURES_DATA[idx].summary:'', 'Comments', old, val);
-    if(GAS_URL){ var f=FEATURES_DATA[idx]||{}; gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',comments:val,services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}}); }
+    if(GAS_URL){ var f=FEATURES_DATA[idx]||{};
+      gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',comments:val,services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'0',notes:bugsData[idx]||''}});
+      gasCall('logAudit',{ts:new Date().toISOString(),user:getIdentity(),feature:f.summary||'',field:'Comments',oldVal:old,newVal:val});
+    }
   }
   saveComments(idx, val);
 }
@@ -1597,7 +1604,7 @@ function onFieldBlur(idx, field, el){
       id:'feat_'+idx, summary:f.summary||'', qa:f.qa||'', effort:f.effort||'',
       preprod:f.preprod||'', committed:f.committed||'', comments:f.comments||'',
       services:f.services||'', automation:f.automation||'',
-      deployed:deployedFeatures[idx]?'1':'', notes:bugsData[idx]||''
+      deployed:deployedFeatures[idx]?'1':'0', notes:bugsData[idx]||''
     }});
     gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:FEATURES_DATA[idx].summary, field:field, oldVal:old, newVal:val});
   }
@@ -2129,7 +2136,8 @@ function saveBugNotes(idx, val){
   logChange(feat?feat.summary:'Feature '+idx, 'Testing Notes', old?'(had notes)':'(empty)', val?'(updated)':'(cleared)');
   localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
   if(GAS_URL && feat){
-    gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:feat.summary||'',qa:feat.qa||'',effort:feat.effort||'',preprod:feat.preprod||'',committed:feat.committed||'',comments:feat.comments||'',services:feat.services||'',automation:feat.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:val}});
+    gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:feat.summary||'',qa:feat.qa||'',effort:feat.effort||'',preprod:feat.preprod||'',committed:feat.committed||'',comments:feat.comments||'',services:feat.services||'',automation:feat.automation||'',deployed:deployedFeatures[idx]?'1':'0',notes:val}});
+    gasCall('logAudit',{ts:new Date().toISOString(),user:getIdentity(),feature:feat.summary||'Feature '+idx,field:'Testing Notes',oldVal:old?'(had notes)':'(empty)',newVal:val?'(updated)':'(cleared)'});
   }
   // Update button indicator without full re-render
   var btn = document.getElementById('bugs-btn-'+idx);
