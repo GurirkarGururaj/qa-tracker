@@ -761,7 +761,9 @@ function pushAllToGas(){
       id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:effortData[i]||f.effort||'',
       preprod:f.preprod||'', committed:f.committed||'', comments:commentsData[i]||f.comments||'',
       services:f.services||'', automation:f.automation||'',
-      deployed:deployedFeatures[i]?'1':'0', notes:bugsData[i]||''
+      // deployed is intentionally omitted here — only toggleDeploy writes deployed status
+      // This prevents import/save from accidentally wiping deployed status
+      notes:bugsData[i]||''
     };
   }).filter(function(f){ return (f.summary||'').trim(); });
   var FCHUNK2 = 5, featChain = Promise.resolve();
