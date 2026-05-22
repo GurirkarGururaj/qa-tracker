@@ -886,11 +886,19 @@ function init(){
     }
   }
 
-  var d = new Date();
-  d.setHours(0,0,0,0);
-  var dow = d.getDay();
-  d.setDate(d.getDate() - (dow===0?6:dow-1));
-  weekStart = d;
+  var savedWeek = localStorage.getItem('qa_week_start');
+  if(savedWeek){
+    var parts = savedWeek.split('-');
+    var d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+    d.setHours(0,0,0,0);
+    weekStart = d;
+  } else {
+    var d = new Date();
+    d.setHours(0,0,0,0);
+    var dow = d.getDay();
+    d.setDate(d.getDate() - (dow===0?6:dow-1));
+    weekStart = d;
+  }
   render();
 
   // Then fetch fresh data from Google Sheets (if connected)
@@ -1163,8 +1171,8 @@ function fmtDate(val){
 function addDays(d,n){ var r=new Date(d); r.setDate(r.getDate()+n); return r; }
 function isToday(d){ return ds(d)===ds(new Date()); }
 function isWknd(d){ return d.getDay()===0||d.getDay()===6; }
-function shiftWeek(n){ weekStart=addDays(weekStart,n*7); render(); }
-function goToday(){ var d=new Date(); d.setHours(0,0,0,0); var dow=d.getDay(); d.setDate(d.getDate()-(dow===0?6:dow-1)); weekStart=d; render(); }
+function shiftWeek(n){ weekStart=addDays(weekStart,n*7); localStorage.setItem('qa_week_start', ds(weekStart)); render(); }
+function goToday(){ var d=new Date(); d.setHours(0,0,0,0); var dow=d.getDay(); d.setDate(d.getDate()-(dow===0?6:dow-1)); weekStart=d; localStorage.setItem('qa_week_start', ds(weekStart)); render(); }
 function getDates(){ var r=[]; for(var i=0;i<14;i++) r.push(addDays(weekStart,i)); return r; }
 function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
