@@ -1079,7 +1079,8 @@ function init(){
               preprod: fmtDate(f.preprod||''), committed: fmtDate(f.committed||''),
               comments: f.comments||'', services: f.services||'', automation: f.automation||''
             });
-            if(f.deployed === '1') deployedFeatures[newIdx] = true;
+            if(f.deployed === '1' || f.deployed === 'true') deployedFeatures[newIdx] = true;
+            else if(f.deployed === '0' || f.deployed === 'false') delete deployedFeatures[newIdx];
             if(f.effort)   effortData[newIdx]   = f.effort;
             if(f.comments) commentsData[newIdx] = f.comments;
             if(f.notes)    bugsData[newIdx]     = f.notes;
