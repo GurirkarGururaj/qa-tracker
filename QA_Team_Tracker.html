@@ -204,6 +204,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
 ::-webkit-scrollbar{width:6px;height:6px;}
 ::-webkit-scrollbar-track{background:var(--surface2);}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -266,6 +268,11 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
 <div id="main-content" style="flex:1;min-height:0;overflow:hidden;position:relative;">
 
 <!-- CALENDAR VIEW -->
+<div style="position:absolute;inset:0;">
+  <div id="cal-loading-overlay" style="display:none;position:absolute;inset:0;background:rgba(15,23,42,0.75);z-index:100;align-items:center;justify-content:center;flex-direction:column;gap:12px;pointer-events:none;">
+    <div style="width:36px;height:36px;border:3px solid #334155;border-top-color:#0ea5e9;border-radius:50%;animation:spin .8s linear infinite;"></div>
+    <div style="color:#94a3b8;font-size:13px;font-family:var(--mono);">Loading calendar from Google Sheets...</div>
+  </div>
 <div class="cal-outer" id="cal-outer" style="position:absolute;inset:0;overflow:auto;">
   <table class="cal-table" id="cal-table">
     <thead id="cal-head"></thead>
@@ -918,6 +925,10 @@ function init(){
     weekStart = d;
   }
   render();
+  // Show subtle loading indicator while GAS fetches
+  if(GAS_URL){
+    showSyncStatus('🔄 Loading from Google Sheets…');
+  }
 
   // Then fetch fresh data from Google Sheets (if connected)
   if(GAS_URL){
@@ -996,6 +1007,10 @@ function init(){
         });
         customSpans = newCustomSpans;
         console.log('Loaded spans from GAS:', data.spans.length);
+        // Render calendar immediately after spans arrive — don't wait for features to load
+        var calOverlay2 = document.getElementById('cal-loading-overlay');
+        if(calOverlay2) calOverlay2.style.display = 'none';
+        if(currentTab === 'calendar') renderCalendar();
       }
 
       // Features — GAS is the full source of truth when connected.
@@ -1027,14 +1042,21 @@ function init(){
             if(!isNaN(parsedIdx) && parsedIdx < FEATURES_DATA.length) seedIdx = parsedIdx;
           }
           if(seedIdx >= 0){
-            // Update existing seed row with GAS data
-            if(f.qa)        FEATURES_DATA[seedIdx].qa        = f.qa;
-            if(f.preprod)   FEATURES_DATA[seedIdx].preprod   = fmtDate(f.preprod);
-            if(f.committed) FEATURES_DATA[seedIdx].committed = fmtDate(f.committed);
-            if(f.comments)  { FEATURES_DATA[seedIdx].comments = f.comments; commentsData[seedIdx] = f.comments; }
-            if(f.services)  FEATURES_DATA[seedIdx].services  = f.services;
-            if(f.automation && f.automation !== '—') FEATURES_DATA[seedIdx].automation = f.automation;
-            if(f.effort)    { FEATURES_DATA[seedIdx].effort = f.effort; effortData[seedIdx] = f.effort; }
+            // GAS overlay strategy:
+            // Excel-sourced fields (qa, preprod, committed, services, automation):
+            //   Seed wins — seed is always updated from latest Excel import.
+            //   Only use GAS value if seed is currently empty (GAS has data seed doesn't).
+            // User-entered fields (deployed, notes, effort, comments):
+            //   GAS always wins — these are edited in the tool, not from Excel.
+            var seedF = FEATURES_DATA[seedIdx];
+            if(!seedF.qa        && f.qa)        seedF.qa        = f.qa;
+            if(!seedF.preprod   && f.preprod)   seedF.preprod   = fmtDate(f.preprod);
+            if(!seedF.committed && f.committed) seedF.committed = fmtDate(f.committed);
+            if(!seedF.services  && f.services)  seedF.services  = f.services;
+            if(f.automation && f.automation !== '—' && !seedF.automation) seedF.automation = f.automation;
+            // User-entered fields — GAS always wins
+            if(f.comments)  { seedF.comments = f.comments; commentsData[seedIdx] = f.comments; }
+            if(f.effort)    { seedF.effort   = f.effort;   effortData[seedIdx]   = f.effort; }
             if(f.notes)     bugsData[seedIdx] = f.notes;
             if(f.deployed === '1' || f.deployed === 'true') deployedFeatures[seedIdx] = true;
             else if(f.deployed === '0' || f.deployed === 'false') delete deployedFeatures[seedIdx];
