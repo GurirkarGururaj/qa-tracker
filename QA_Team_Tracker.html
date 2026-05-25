@@ -206,6 +206,21 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Date picker in features table */
+#feat-view input[type="date"]{
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 0;
+  min-width: 110px;
+}
+#feat-view input[type="date"]::-webkit-calendar-picker-indicator{
+  opacity: 0.5;
+  cursor: pointer;
+}
+#feat-view input[type="date"]::-webkit-calendar-picker-indicator:hover{
+  opacity: 1;
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -1641,6 +1656,38 @@ function onCommentsBlur(idx, el){
   saveComments(idx, val);
 }
 // Generic handler for all other editable fields (summary, qa, preprod, committed, services, automation)
+// Convert display format "15 May 2026" or "15-May-2026" → "2026-05-15" for date input value
+function displayToISO(val){
+  if(!val || !val.trim()) return '';
+  var s = val.trim();
+  // Already ISO
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // "15 May 2026" or "15-May-2026"
+  var months = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',
+                jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+  var m = s.match(/^(\d{1,2})[\s\-](\w{3})[\s\-](\d{4})$/);
+  if(m){
+    var mo = months[m[2].toLowerCase()];
+    if(mo) return m[3]+'-'+mo+'-'+m[1].padStart(2,'0');
+  }
+  return '';
+}
+
+// Handle date picker change for preprod/committed fields
+function onDateFieldChange(idx, field, el){
+  var isoVal = el.value; // "2026-05-15"
+  if(!isoVal) return;
+  // Convert to display format for storage
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var parts = isoVal.split('-');
+  var display = parseInt(parts[2])+' '+months[parseInt(parts[1])-1]+' '+parts[0];
+  // Update FEATURES_DATA directly
+  if(FEATURES_DATA[idx]) FEATURES_DATA[idx][field] = display;
+  // Save via same path as onFieldBlur
+  var fakeEl = {innerText: display};
+  onFieldBlur(idx, field, fakeEl);
+}
+
 function onFieldBlur(idx, field, el){
   var val = el.innerText.trim();
   if(field === 'summary' && val && FEATURES_DATA[idx]) delete FEATURES_DATA[idx]._new;
@@ -2368,8 +2415,8 @@ function renderFeatures(){
       +'<td contenteditable="true" style="min-width:280px;font-size:13px;font-weight:500;'+bg+'" onblur="onFieldBlur('+origIdx+',\'summary\',this)" id="summary-'+origIdx+'">'+escH(f.summary||'')+'</td>'
       +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'qa\',this)" id="qa-'+origIdx+'">'+escH(f.qa||'')+'</td>'
       +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onEffortBlur('+origIdx+',this)" id="effort-'+origIdx+'">'+escH(f.effort||'')+'</td>'
-      +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'preprod\',this)" id="preprod-'+origIdx+'">'+escH(fmtDate(f.preprod||''))+'</td>'
-      +'<td contenteditable="true" style="font-size:13px;'+bg+'" onblur="onFieldBlur('+origIdx+',\'committed\',this)" id="committed-'+origIdx+'">'+escH(fmtDate(f.committed||''))+'</td>'
+      +'<td style="font-size:13px;'+bg+'padding:4px 8px;"><input type="date" id="preprod-'+origIdx+'" value="'+displayToISO(f.preprod||'')+'" onchange="onDateFieldChange('+origIdx+',\'preprod\',this)" style="border:none;background:transparent;font-size:13px;font-family:var(--sans);color:var(--txt);cursor:pointer;width:100%;outline:none;"></td>'
+      +'<td style="font-size:13px;'+bg+'padding:4px 8px;"><input type="date" id="committed-'+origIdx+'" value="'+displayToISO(f.committed||'')+'" onchange="onDateFieldChange('+origIdx+',\'committed\',this)" style="border:none;background:transparent;font-size:13px;font-family:var(--sans);color:var(--txt);cursor:pointer;width:100%;outline:none;"></td>'
       +'<td contenteditable="true" style="font-size:13px;color:#374151;min-width:160px;white-space:pre-wrap;'+bg+'" onblur="onCommentsBlur('+origIdx+',this)" id="comments-'+origIdx+'">'+escH(f.comments||'')+'</td>'
       +'<td contenteditable="true" style="font-size:12px;color:#374151;'+bg+'" onblur="onFieldBlur('+origIdx+',\'services\',this)" id="services-'+origIdx+'">'+escH(f.services||'')+'</td>'
       +'<td style="font-size:12px;max-width:120px;'+bg+'" id="automation-'+origIdx+'" onclick="editAutoCell('+origIdx+',this)" title="Click to edit">'        +autoLinks(f.automation||'')+'</td>'
