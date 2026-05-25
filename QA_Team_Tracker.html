@@ -787,35 +787,46 @@ function pushAllToGas(){
       notes:bugsData[i]||''
     };
   }).filter(function(f){ return (f.summary||'').trim(); });
-  var FCHUNK2 = 5, featChain = Promise.resolve();
+  // Use replaceFeatures (wipe + rewrite) to guarantee no duplicates
+  // Individual field edits use saveFeature separately for real-time updates
+  var FCHUNK2 = 10, featChain = Promise.resolve();
   for(var fi2 = 0; fi2 < allFeats.length; fi2 += FCHUNK2){
-    (function(chunk){
+    var isFirst2 = fi2 === 0;
+    (function(chunk, first){
       featChain = featChain.then(function(){
-        return Promise.all(chunk.map(function(feat){
-          return gasCall('saveFeature', {feature: feat});
-        }));
+        return gasCall(first ? 'replaceFeatures' : 'appendFeatures', {features: chunk});
       });
-    })(allFeats.slice(fi2, fi2+FCHUNK2));
+    })(allFeats.slice(fi2, fi2+FCHUNK2), isFirst2);
   }
+  if(allFeats.length === 0) featChain = gasCall('replaceFeatures', {features: []});
   var p2 = featChain;
 
-  // Spans — upsert only custom spans (never replace whole sheet — would wipe other users' data)
-  // Seeded spans are always in HTML; only custom (user-added) spans need GAS persistence
-  var spanChain = Promise.resolve();
+  // Use replaceSpans (wipe + rewrite) to guarantee no duplicates
+  // Build complete span list: all custom spans across all members
+  var allSpans = [];
   var spanCount = 0;
   members.forEach(function(m){
     (customSpans[m.id]||[]).forEach(function(s){
       if(!(s.text||'').trim()) return;
       var start = s.start ? String(s.start).substring(0,10) : s.start;
-      var end = s.end ? String(s.end).substring(0,10) : s.end;
+      var end   = s.end   ? String(s.end).substring(0,10)   : s.end;
       if(/^\d{4}-\d{2}-\d{2}$/.test(start)){
         var sid = spanId(m.id,{text:s.text,start:start});
-        var span = {id:sid, memberId:m.id, text:s.text, type:s.type, start:start, end:end};
-        spanChain = spanChain.then(function(){ return gasCall('saveSpan', {span:span}); });
+        allSpans.push({id:sid, memberId:m.id, text:s.text, type:s.type||'feature', start:start, end:end});
         spanCount++;
       }
     });
   });
+  var SCHUNK = 20, spanChain = Promise.resolve();
+  for(var si2 = 0; si2 < allSpans.length; si2 += SCHUNK){
+    var isFirstS = si2 === 0;
+    (function(chunk, first){
+      spanChain = spanChain.then(function(){
+        return gasCall(first ? 'replaceSpans' : 'appendSpans', {spans: chunk});
+      });
+    })(allSpans.slice(si2, si2+SCHUNK), isFirstS);
+  }
+  if(allSpans.length === 0) spanChain = gasCall('replaceSpans', {spans: []});
   var p3 = spanChain;
 
   var deployedCount = allFeats.filter(function(f){ return f.deployed==='1'; }).length;
