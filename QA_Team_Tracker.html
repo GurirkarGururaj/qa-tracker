@@ -784,7 +784,7 @@ function pushAllToGas(){
       id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:effortData[i]||f.effort||'',
       preprod:f.preprod||'', committed:f.committed||'', comments:commentsData[i]||f.comments||'',
       services:f.services||'', automation:f.automation||'',
-      deployed: deployedFeatures[i] ? '1' : '0',  // include deployed so replaceFeatures doesn't wipe it
+      deployed: deployedFeatures[i] ? '1' : '',  // send '' not '0' — upsertRow preserves existing GAS value
       notes:bugsData[i]||''
     };
   }).filter(function(f){ return (f.summary||'').trim(); });
@@ -1030,9 +1030,27 @@ function init(){
         // This ensures the tab is never blank while GAS loads
         var gasByIdx = {};
         var gasExtra = []; // rows not in seed
-        // Deduplicate GAS rows — keep last occurrence of each id (most recent save wins)
+        // Deduplicate GAS rows — merge all rows with same id, prefer non-empty values
+        // For deployed: prefer '1' over '' over '0' (never lose a deployed mark)
         var deduped = {};
-        data.features.forEach(function(f){ if(f.id) deduped[f.id] = f; });
+        data.features.forEach(function(f){
+          if(!f.id) return;
+          if(!deduped[f.id]){
+            deduped[f.id] = f;
+          } else {
+            var existing = deduped[f.id];
+            // Merge: take non-empty value for each field
+            Object.keys(f).forEach(function(k){
+              if(k === 'deployed'){
+                // Special: '1' always wins, then existing, then new
+                if(f[k] === '1' || existing[k] === '1') existing[k] = '1';
+                else if(f[k]) existing[k] = f[k];
+              } else {
+                if(f[k] && !existing[k]) existing[k] = f[k];
+              }
+            });
+          }
+        });
         var uniqueFeats = Object.values ? Object.values(deduped) : Object.keys(deduped).map(function(k){ return deduped[k]; });
 
         uniqueFeats.forEach(function(f){
@@ -1063,7 +1081,8 @@ function init(){
             if(f.effort)    { seedF.effort   = f.effort;   effortData[seedIdx]   = f.effort; }
             if(f.notes)     bugsData[seedIdx] = f.notes;
             if(f.deployed === '1' || f.deployed === 'true') deployedFeatures[seedIdx] = true;
-            else if(f.deployed === '0' || f.deployed === 'false') delete deployedFeatures[seedIdx];
+            else if(f.deployed === '0') delete deployedFeatures[seedIdx];
+            // '' means unknown/not set by this user — don't change existing state
           } else {
             // Not in seed — append as extra row
             var newIdx = FEATURES_DATA.length;
@@ -1073,7 +1092,8 @@ function init(){
               comments: f.comments||'', services: f.services||'', automation: f.automation||''
             });
             if(f.deployed === '1' || f.deployed === 'true') deployedFeatures[newIdx] = true;
-            else if(f.deployed === '0' || f.deployed === 'false') delete deployedFeatures[newIdx];
+            else if(f.deployed === '0') delete deployedFeatures[newIdx];
+            // '' means unknown — don't change
             if(f.effort)   effortData[newIdx]   = f.effort;
             if(f.comments) commentsData[newIdx] = f.comments;
             if(f.notes)    bugsData[newIdx]     = f.notes;
@@ -1578,7 +1598,7 @@ function addFeatureRow(){
   if(GAS_URL){
     gasCall('saveFeature', {feature:{
       id:'feat_'+idx, summary:'', qa:'', effort:'', preprod:'', committed:'',
-      comments:'', services:'', automation:'—', deployed:'0', notes:''
+      comments:'', services:'', automation:'—', deployed:'', notes:''
     }});
     gasCall('logAudit',{ts:new Date().toISOString(),user:getIdentity(),feature:'New feature row',field:'Row Added',oldVal:'',newVal:'(blank row - feat_'+idx+')'});
   }
@@ -1630,7 +1650,7 @@ function onEffortBlur(idx, el){
   if(val !== old){
     logChange(FEATURES_DATA[idx]?FEATURES_DATA[idx].summary:'', 'Effort', old, val);
     if(GAS_URL){ var f=FEATURES_DATA[idx]||{};
-      gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:val,preprod:f.preprod||'',committed:f.committed||'',comments:f.comments||'',services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'0',notes:bugsData[idx]||''}});
+      gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:val,preprod:f.preprod||'',committed:f.committed||'',comments:f.comments||'',services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}});
       gasCall('logAudit',{ts:new Date().toISOString(),user:getIdentity(),feature:f.summary||'',field:'Effort',oldVal:old,newVal:val});
     }
   }
@@ -1649,7 +1669,7 @@ function onCommentsBlur(idx, el){
   if(val !== old){
     logChange(FEATURES_DATA[idx]?FEATURES_DATA[idx].summary:'', 'Comments', old, val);
     if(GAS_URL){ var f=FEATURES_DATA[idx]||{};
-      gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',comments:val,services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'0',notes:bugsData[idx]||''}});
+      gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',comments:val,services:f.services||'',automation:f.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:bugsData[idx]||''}});
       gasCall('logAudit',{ts:new Date().toISOString(),user:getIdentity(),feature:f.summary||'',field:'Comments',oldVal:old,newVal:val});
     }
   }
@@ -1705,7 +1725,7 @@ function onFieldBlur(idx, field, el){
       id:'feat_'+idx, summary:f.summary||'', qa:f.qa||'', effort:f.effort||'',
       preprod:f.preprod||'', committed:f.committed||'', comments:f.comments||'',
       services:f.services||'', automation:f.automation||'',
-      deployed:deployedFeatures[idx]?'1':'0', notes:bugsData[idx]||''
+      deployed:deployedFeatures[idx]?'1':'', notes:bugsData[idx]||''
     }});
     gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:FEATURES_DATA[idx].summary, field:field, oldVal:old, newVal:val});
   }
@@ -2271,7 +2291,7 @@ function saveBugNotes(idx, val){
   logChange(feat?feat.summary:'Feature '+idx, 'Testing Notes', old?'(had notes)':'(empty)', val?'(updated)':'(cleared)');
   localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
   if(GAS_URL && feat){
-    gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:feat.summary||'',qa:feat.qa||'',effort:feat.effort||'',preprod:feat.preprod||'',committed:feat.committed||'',comments:feat.comments||'',services:feat.services||'',automation:feat.automation||'',deployed:deployedFeatures[idx]?'1':'0',notes:val}});
+    gasCall('saveFeature',{feature:{id:'feat_'+idx,summary:feat.summary||'',qa:feat.qa||'',effort:feat.effort||'',preprod:feat.preprod||'',committed:feat.committed||'',comments:feat.comments||'',services:feat.services||'',automation:feat.automation||'',deployed:deployedFeatures[idx]?'1':'',notes:val}});
     gasCall('logAudit',{ts:new Date().toISOString(),user:getIdentity(),feature:feat.summary||'Feature '+idx,field:'Testing Notes',oldVal:old?'(had notes)':'(empty)',newVal:val?'(updated)':'(cleared)'});
   }
   // Update button indicator without full re-render
