@@ -715,7 +715,7 @@ function spanId(memberId, s){
   return memberId+'__'+s.start+'__'+s.text.substring(0,30).replace(/[^a-z0-9]/gi,'_');
 }
 
-function syncCalendarToGas(){
+function syncCalendarToGas(replaceAll){
   if(!GAS_URL){ openGasSettings(); return; }
   var btn = document.getElementById('btn-cal-sync');
   if(btn){ btn.textContent='☁ Syncing…'; btn.disabled=true; }
@@ -748,9 +748,18 @@ function syncCalendarToGas(){
     });
   });
 
-  gasCall('saveMembers', {members: members}).then(function(){
-    return pushSequential('saveSpan', 'span', allSpans);
-  }).then(function(){
+  var syncPromise;
+  if(replaceAll){
+    syncPromise = gasCall('saveMembers', {members: members}).then(function(){
+      return gasCall('replaceSpans', {spans: allSpans});
+    });
+  } else {
+    syncPromise = gasCall('saveMembers', {members: members}).then(function(){
+      return pushSequential('saveSpan', 'span', allSpans);
+    });
+  }
+
+  syncPromise.then(function(){
     if(btn){ btn.textContent='☁ Sync to Sheets'; btn.disabled=false; }
     showSyncStatus('Calendar synced! '+allSpans.length+' spans written to Google Sheets', true);
     console.log('Calendar sync complete:', allSpans.length, 'spans');
@@ -1893,8 +1902,9 @@ function clearAudit(){
 
 // ═══════════════ EXCEL UPSERT ════════════════════════════════════════════════
 function importCalendarExcel(e){
+  window._importInProgress = true;
   var file = e.target.files[0];
-  if(!file) return;
+  if(!file){ window._importInProgress = false; return; }
   function showStatus(msg, color){
     var bar = document.getElementById('import-status-bar');
     var txt = document.getElementById('import-status-text');
@@ -2080,12 +2090,14 @@ function importCalendarExcel(e){
       showStatus('✓ ' + msg, '#16a34a');
       console.log('Calendar import:', msg);
 
-      // Auto-push new spans to Google Sheets if connected
-      if(GAS_URL && added > 0) syncCalendarToGas();
+      // Auto-push new or updated spans to Google Sheets if connected
+      if(GAS_URL && (added > 0 || updated > 0)) syncCalendarToGas(true);
+      window._importInProgress = false;
 
     }catch(err){
       console.error('Import error:', err);
       showStatus('❌ Error: ' + err.message, '#dc2626');
+      window._importInProgress = false;
     }
   };
 
