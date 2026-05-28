@@ -208,17 +208,17 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14p
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Date picker in features table */
-#feat-view input[type="date"]{
+#features-view input[type="date"]{
   -webkit-appearance: none;
   appearance: none;
   padding: 0;
   min-width: 110px;
 }
-#feat-view input[type="date"]::-webkit-calendar-picker-indicator{
+#features-view input[type="date"]::-webkit-calendar-picker-indicator{
   opacity: 0.5;
   cursor: pointer;
 }
-#feat-view input[type="date"]::-webkit-calendar-picker-indicator:hover{
+#features-view input[type="date"]::-webkit-calendar-picker-indicator:hover{
   opacity: 1;
 }
 </style>
@@ -483,23 +483,36 @@ function gasGet(action, params){
         qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(typeof v==='object'?JSON.stringify(v):String(v));
       });
     }
+    var timedOut = false;
     var timer = setTimeout(function(){
+      timedOut = true;
       delete window[cbName];
       var el = document.getElementById(scriptId);
       if(el) el.remove();
+      showSyncStatus('⚠ Google Sheets connection timeout (>15s) — retrying...', false);
       resolve(null);
     }, 15000);
     window[cbName] = function(data){
-      clearTimeout(timer);
-      delete window[cbName];
-      var el = document.getElementById(scriptId);
-      if(el) el.remove();
-      resolve(data);
+      if(!timedOut){
+        clearTimeout(timer);
+        delete window[cbName];
+        var el = document.getElementById(scriptId);
+        if(el) el.remove();
+        resolve(data);
+      }
     };
     var script = document.createElement('script');
     script.id = scriptId;
     script.src = GAS_URL + qs;
-    script.onerror = function(){ clearTimeout(timer); delete window[cbName]; script.remove(); resolve(null); };
+    script.onerror = function(){
+      if(!timedOut){
+        clearTimeout(timer);
+        delete window[cbName];
+        script.remove();
+        console.error('GAS request failed:', action);
+        resolve(null);
+      }
+    };
     document.head.appendChild(script);
   });
 }
@@ -853,7 +866,28 @@ function init(){
     try{
       var s = JSON.parse(saved);
       if(s.auditLog) auditLog = s.auditLog;
-      // Only use localStorage for shared data if GAS is not connected (offline fallback)
+      // Always load featuresData, deployed, effort, comments, notes from localStorage as a fast
+      // initial render — GAS will overlay with authoritative values once it loads.
+      // This ensures newly imported rows are visible immediately on reload, not after GAS responds.
+      if(s.featuresData) FEATURES_DATA = s.featuresData;
+      if(s.deployedFeatures) deployedFeatures = s.deployedFeatures;
+      if(s.effortData){
+        effortData = s.effortData;
+        Object.keys(effortData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].effort=effortData[k]; });
+      }
+      if(s.commentsData){
+        commentsData = s.commentsData;
+        Object.keys(commentsData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].comments=commentsData[k]; });
+      }
+      if(s.bugsData){
+        bugsData = s.bugsData;
+        Object.keys(bugsData).forEach(function(k){
+          if(Array.isArray(bugsData[k])){
+            bugsData[k] = bugsData[k].map(function(b){ return (b.id||'')+(b.summary?' - '+b.summary:''); }).join('\n');
+          }
+        });
+      }
+      // Members and spans: only trust localStorage when GAS is not connected (offline fallback)
       if(!GAS_URL){
         if(s.members) members = s.members;
         if(s.customSpans){
@@ -865,24 +899,6 @@ function init(){
             });
           });
           customSpans = cleaned;
-        }
-        if(s.deployedFeatures) deployedFeatures = s.deployedFeatures;
-        if(s.effortData){
-          effortData = s.effortData;
-          Object.keys(effortData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].effort=effortData[k]; });
-        }
-        if(s.commentsData){
-          commentsData = s.commentsData;
-          Object.keys(commentsData).forEach(function(k){ if(FEATURES_DATA[k]) FEATURES_DATA[k].comments=commentsData[k]; });
-        }
-        if(s.featuresData) FEATURES_DATA = s.featuresData;
-        if(s.bugsData){
-          bugsData = s.bugsData;
-          Object.keys(bugsData).forEach(function(k){
-            if(Array.isArray(bugsData[k])){
-              bugsData[k] = bugsData[k].map(function(b){ return (b.id||'')+(b.summary?' - '+b.summary:''); }).join('\n');
-            }
-          });
         }
       }
     }catch(e){}
@@ -1023,7 +1039,7 @@ function init(){
         // Render calendar immediately after spans arrive — don't wait for features to load
         var calOverlay2 = document.getElementById('cal-loading-overlay');
         if(calOverlay2) calOverlay2.style.display = 'none';
-        if(currentTab === 'calendar') renderCalendar();
+        if(currentTab === 'calendar') render();
       }
 
       // Features — GAS is the full source of truth when connected.
@@ -1148,7 +1164,7 @@ function init(){
           if(window._pushInProgress) return; // don't reload while saving
           gasGet('loadAll',{}).then(function(d){
             if(!d || d.error) return;
-            // Re-apply features overlay silently
+            // Re-apply features overlay silently — only update changed fields, don't replace entire array
             if(d.features && d.features.length){
               d.features.forEach(function(f){
                 if(!f.summary||!f.summary.trim()) return;
@@ -1157,11 +1173,22 @@ function init(){
                 });
                 if(si<0){ var ix=parseInt((f.id||'').replace('feat_','')); if(!isNaN(ix)&&FEATURES_DATA[ix]) si=ix; }
                 if(si<0) return;
+                // ONLY update fields from GAS if local data doesn't have uncommitted edits
+                // deployed: always sync from GAS (it's the source of truth)
                 if(f.deployed==='1'||f.deployed==='true') deployedFeatures[si]=true;
                 else if(f.deployed==='0'||f.deployed==='false') delete deployedFeatures[si];
-                if(f.effort)   { effortData[si]=f.effort;   FEATURES_DATA[si].effort=f.effort; }
-                if(f.comments) { commentsData[si]=f.comments; FEATURES_DATA[si].comments=f.comments; }
-                if(f.notes)    bugsData[si]=f.notes;
+                // effort, comments, notes: only update if GAS value is newer (non-empty)
+                if(f.effort && (!FEATURES_DATA[si].effort || effortData[si]===FEATURES_DATA[si].effort)) {
+                  effortData[si]=f.effort;
+                  FEATURES_DATA[si].effort=f.effort;
+                }
+                if(f.comments && (!FEATURES_DATA[si].comments || commentsData[si]===FEATURES_DATA[si].comments)) {
+                  commentsData[si]=f.comments;
+                  FEATURES_DATA[si].comments=f.comments;
+                }
+                if(f.notes && (!bugsData[si] || bugsData[si]===FEATURES_DATA[si].notes)) {
+                  bugsData[si]=f.notes;
+                }
               });
             }
             // Re-apply spans silently
@@ -1184,6 +1211,12 @@ function init(){
                 }
               });
               customSpans = newCustom;
+            } else if(d.spans===null || (Array.isArray(d.spans) && d.spans.length===0)){
+              // GAS spans sheet is empty — merge with local instead of clearing
+              // Only clear if explicitly confirmed GAS is empty AND no local customSpans
+              if(!Object.keys(customSpans).some(function(k){ return customSpans[k].length > 0; })){
+                customSpans = {};
+              }
             }
             // Also update audit log from GAS
             if(d.auditLog && d.auditLog.length){
@@ -1219,7 +1252,7 @@ function saveData(){
 
 // ═══════════════════════ DATE HELPERS ════════════════════════════════════════
 function ds(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-// Format any date string to "15 May 2026" — strips time/timezone
+// Format any date string to "15 May 2026" — strips time/timezone, normalizes century
 function fmtDate(val){
   if(!val) return '';
   var s = String(val).trim();
@@ -1230,13 +1263,31 @@ function fmtDate(val){
   // YYYY-MM-DD (plain date string) — parse as LOCAL to avoid UTC midnight shift
   var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if(iso){
-    // Use explicit local date construction — avoids UTC midnight → prev day in IST
+    // Validate 4-digit year; discard 2-digit years from this path
     var yr=parseInt(iso[1]), mo=parseInt(iso[2])-1, dy=parseInt(iso[3]);
+    if(yr < 1900 || yr > 2099) return s; // invalid century
+    if(mo < 0 || mo > 11 || dy < 1 || dy > 31) return s; // invalid month/day
     return dy+' '+months[mo]+' '+yr;
   }
   // Date object (e.g. from Excel import)
   if(val instanceof Date){
+    if(isNaN(val.getTime())) return '';
     return val.getUTCDate()+' '+months[val.getUTCMonth()]+' '+val.getUTCFullYear();
+  }
+  // Handle "22-May-26" text format: normalize 2-digit year to 4-digit
+  var m2 = s.match(/^(\d{1,2})[\s\-](\w{3})[\s\-](\d{2,4})$/);
+  if(m2){
+    var yr2 = m2[3];
+    if(yr2.length === 2){
+      // Normalize: 00-30 -> 2000-2030, 31-99 -> 1931-1999
+      var yr2int = parseInt(yr2);
+      yr2 = (yr2int <= 30) ? '20'+yr2 : '19'+yr2;
+    } else if(yr2.length === 3){
+      yr2 = '0'+yr2; // e.g., "026" -> "0026" (invalid, reject)
+      return s; 
+    }
+    var moIdx = months.findIndex(function(m){ return m.toLowerCase() === m2[2].toLowerCase(); });
+    if(moIdx >= 0) return parseInt(m2[1])+' '+months[moIdx]+' '+yr2;
   }
   // Fallback: parse and use local methods
   var d = new Date(s);
@@ -1446,9 +1497,9 @@ function openEditModal(memberId, start, end, text, type){
   document.getElementById('task-end').value = end;
   // Select correct type button
   var tl = type.toLowerCase();
-  document.querySelectorAll('.type-btn').forEach(function(b){ b.classList.remove('selected'); });
-  var match = Array.from(document.querySelectorAll('.type-btn')).find(function(b){ return b.textContent.toLowerCase().includes(tl); });
-  if(match) match.classList.add('selected');
+  document.querySelectorAll('.type-opt').forEach(function(b){ b.classList.remove('sel'); });
+  var match = Array.from(document.querySelectorAll('.type-opt')).find(function(b){ return b.dataset.t === tl; });
+  if(match) match.classList.add('sel');
   setTimeout(function(){ document.getElementById('task-txt').select(); }, 80);
 }
 
@@ -1511,7 +1562,7 @@ function saveTask(){
   customSpans[mid].push(span);
   if(GAS_URL){
     var spanObj = {id:spanId(mid,span), memberId:mid, text:text, type:type, start:start, end:end};
-    gasCall('saveSpan', {span: JSON.stringify(spanObj)});
+    gasCall('saveSpan', {span: spanObj});
     var logField = editingSpan ? 'Task Edited' : 'Task Added';
     var logOld = editingSpan ? editingSpan.text : '';
     gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:memberName, field:logField, oldVal:logOld, newVal:text+' ('+start+' to '+end+')'});
@@ -1621,7 +1672,10 @@ function addFeatureRow(){
 function deleteFeatureRow(idx){
   if(!confirm('Delete this feature row? This cannot be undone.')) return;
   var f = FEATURES_DATA[idx]||{};
-  logChange(f.summary||'Feature '+idx, 'Row Deleted', f.summary||'', '');
+  // Record full feature details in audit log before deletion
+  var featureSummary = f.summary || '';
+  var featureDetails = JSON.stringify({summary:f.summary||'',qa:f.qa||'',effort:f.effort||'',preprod:f.preprod||'',committed:f.committed||'',services:f.services||'',automation:f.automation||''});
+  logChange(featureSummary||'Feature '+idx, 'Row Deleted', featureDetails, '');
   // Mark as blank rather than splicing — preserves feat_N indices in GAS
   FEATURES_DATA[idx] = {summary:'', qa:'', effort:'', preprod:'', committed:'', comments:'', services:'', automation:'—'};
   delete deployedFeatures[idx];
@@ -1630,7 +1684,7 @@ function deleteFeatureRow(idx){
   delete commentsData[idx];
   if(GAS_URL){
     gasCall('deleteFeature', {id: 'feat_'+idx});
-    gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:f.summary||'', field:'Row Deleted', oldVal:f.summary||'', newVal:''});
+    gasCall('logAudit', {ts:new Date().toISOString(), user:getIdentity(), feature:featureSummary||'', field:'Row Deleted', oldVal:featureDetails, newVal:''});
   }
   localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
   renderFeatures();
@@ -1647,6 +1701,7 @@ function sortFt(col){
 }
 
 function saveEffort(idx, val){
+  if(!FEATURES_DATA[idx]) { console.warn('Cannot save effort: feature '+idx+' not found'); return; }
   effortData[idx] = val;
   if(FEATURES_DATA[idx]) FEATURES_DATA[idx].effort = val;
   localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
@@ -1654,6 +1709,7 @@ function saveEffort(idx, val){
 
 
 function onEffortBlur(idx, el){
+  if(!FEATURES_DATA[idx]) { console.warn('Cannot update effort: feature '+idx+' not found'); return; }
   var val = el.innerText.trim();
   var old = FEATURES_DATA[idx] ? (FEATURES_DATA[idx].effort||'') : '';
   if(val !== old){
@@ -1667,12 +1723,14 @@ function onEffortBlur(idx, el){
 }
 
 function saveComments(idx, val){
+  if(!FEATURES_DATA[idx]) { console.warn('Cannot save comments: feature '+idx+' not found'); return; }
   commentsData[idx] = val;
   if(FEATURES_DATA[idx]) FEATURES_DATA[idx].comments = val;
   localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
 }
 
 function onCommentsBlur(idx, el){
+  if(!FEATURES_DATA[idx]) { console.warn('Cannot update comments: feature '+idx+' not found'); return; }
   var val = el.innerText.trim();
   var old = FEATURES_DATA[idx] ? (FEATURES_DATA[idx].comments||'') : '';
   if(val !== old){
@@ -1718,9 +1776,23 @@ function onDateFieldChange(idx, field, el){
 }
 
 function onFieldBlur(idx, field, el){
+  if(!FEATURES_DATA[idx]) { console.warn('Cannot update field: feature '+idx+' not found'); return; }
   var val = el.innerText.trim();
   if(field === 'summary' && val && FEATURES_DATA[idx]) delete FEATURES_DATA[idx]._new;
   if(!FEATURES_DATA[idx]) return;
+  
+  // Validate QA field: ensure name exists in members list or is a valid format
+  if(field === 'qa' && val){
+    var qaNames = val.split(/[,&]+/).map(function(q){ return q.trim(); });
+    var validQAs = members.map(function(m){ return m.name; });
+    var invalidQAs = qaNames.filter(function(q){ return !validQAs.includes(q) && q; });
+    if(invalidQAs.length > 0){
+      var msg = 'Warning: "'+invalidQAs[0]+'" not in team. Valid QA members: '+validQAs.join(', ');
+      console.warn(msg);
+      // Still save but log warning
+    }
+  }
+  
   var old = FEATURES_DATA[idx][field] || '';
   if(val === old) return;
   logChange(FEATURES_DATA[idx].summary, field, old, val);
@@ -2008,7 +2080,7 @@ function importCalendarExcel(e){
       function getType(t){
         var tl = t.toLowerCase();
         if(tl.includes('leave')) return 'leave';
-        if(tl.includes('automat')||tl.includes('zauto')||tl.includes('zcf')||tl.includes('zcomm')||tl.includes('zdeploy')) return 'automation';
+        if(tl.includes('automat')||tl.includes('zauto')) return 'automation';
         if(tl.includes('zhire')||tl.includes('zbugs')||tl.includes('zra')||tl.includes('zamp')||
            tl.includes('security')||tl.includes('dast')||tl.includes('trivy')||tl.includes('sanity')) return 'bug';
         return 'feature';
@@ -2019,7 +2091,9 @@ function importCalendarExcel(e){
         var name = row[0] ? String(row[0]).trim() : '';
         if(!name || name.toLowerCase()==='qa') continue;
 
-        var mid = 'm_' + name.toLowerCase().replace(/\s+/g,'_');
+        // Normalize member name: remove special chars, collapse whitespace
+        var normalized = name.toLowerCase().replace(/[^a-z0-9\s]/g,'').replace(/\s+/g,'_');
+        var mid = 'm_' + normalized;
         // Add member if not exists
         if(!members.find(function(m){ return m.id===mid; })){
           var palette=['#2563eb','#7c3aed','#0891b2','#16a34a','#d97706','#dc2626','#db2777'];
@@ -2110,6 +2184,13 @@ function importCalendarExcel(e){
 function upsertFromExcel(e){
   var file = e.target.files[0];
   if(!file) return;
+  // Guard: prevent concurrent imports
+  if(window._importInProgress){
+    var st = document.getElementById('upsert-status');
+    if(st){ st.textContent = '⏳ Import already in progress — please wait...'; st.style.color='#92400e'; }
+    e.target.value = '';
+    return;
+  }
   // Guard: wait for GAS to finish loading to avoid race condition overwriting import
   if(!_gasLoaded && GAS_URL){
     var status = document.getElementById('upsert-status');
@@ -2139,7 +2220,12 @@ function upsertFromExcel(e){
       var col = function(name){ return headers.findIndex(function(h){ return h.includes(name); }); };
 
       var cSum     = col('summary') >= 0 ? col('summary') : col('feature') >= 0 ? col('feature') : 0;
-      var cQA      = col('qa resource') >= 0 ? col('qa resource') : col('qa owner') >= 0 ? col('qa owner') : col('qa');
+      // QA column: try multiple variations (case-insensitive substring match)
+      var cQA = -1;
+      var qaMatches = ['qa resource','qa owner','qa','assignee','qatester','tester','qa_resource'];
+      for(var qi = 0; qi < qaMatches.length; qi++){
+        if(col(qaMatches[qi]) >= 0){ cQA = col(qaMatches[qi]); break; }
+      }
       var cEffort  = col('effort');
       var cPreprod = col('preprod');
       var cCommit  = col('committed') >= 0 ? col('committed') : col('commit');
@@ -2174,24 +2260,23 @@ function upsertFromExcel(e){
 
         function fmt(v){
           if(!v || String(v).trim()==='') return '';
+          var fmtMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
           if(v instanceof Date){
             // Use UTC to avoid IST timezone shift (midnight UTC = 18:30 prev day IST)
-            var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            return String(v.getUTCDate()).padStart(2,'0')+'-'+months[v.getUTCMonth()]+'-'+v.getUTCFullYear();
+            return v.getUTCDate()+' '+fmtMonths[v.getUTCMonth()]+' '+v.getUTCFullYear();
           }
           var s = String(v).trim();
           // Handle Excel serial number (cellDates:false)
           if(!isNaN(v) && Number(v) > 1000){
             var utcMs = Math.round((Number(v) - 25569) * 86400 * 1000);
             var utcD = new Date(utcMs);
-            var months2 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            return String(utcD.getUTCDate()).padStart(2,'0')+'-'+months2[utcD.getUTCMonth()]+'-'+utcD.getUTCFullYear();
+            return utcD.getUTCDate()+' '+fmtMonths[utcD.getUTCMonth()]+' '+utcD.getUTCFullYear();
           }
-          // Handle "22-May-26" or "22-May-2026" text format
+          // Handle "22-May-26", "22-May-2026", "22/May/2026" text format
           var m2 = s.match(/^(\d{1,2})[-\/](\w{3,})[-\/](\d{2,4})$/);
           if(m2){
             var yr2 = m2[3].length===2 ? '20'+m2[3] : m2[3];
-            return m2[1].padStart(2,'0')+'-'+m2[2].substring(0,3)+'-'+yr2;
+            return parseInt(m2[1])+' '+m2[2].substring(0,3)+' '+yr2;
           }
           return s;
         }
@@ -2244,23 +2329,101 @@ function upsertFromExcel(e){
       renderFeatures();
       if(GAS_URL){
         window._importInProgress = true;
-        // Use saveFeature per row for import (not replaceFeatures)
-        // This preserves deployed status already in GAS — import only updates Excel fields
-        var importChain = Promise.resolve();
+        // Build the list of features to save
+        var featsToSave = [];
         FEATURES_DATA.forEach(function(f, i){
           if(!(f.summary||'').trim()) return;
-          var feat = {
+          featsToSave.push({
             id:'feat_'+i, summary:f.summary||'', qa:f.qa||'', effort:effortData[i]||f.effort||'',
             preprod:f.preprod||'', committed:f.committed||'', comments:commentsData[i]||f.comments||'',
             services:f.services||'', automation:f.automation||'',
             // deployed intentionally omitted — import must NOT overwrite deployed status
             notes:bugsData[i]||''
-          };
-          importChain = importChain.then(function(){ return gasCall('saveFeature', {feature:feat}); });
+          });
         });
+        // Use chunked parallel saves (5 at a time) to avoid sequential timeout risk
+        var IMPORT_CHUNK = 5;
+        var importChain = Promise.resolve();
+        for(var fi = 0; fi < featsToSave.length; fi += IMPORT_CHUNK){
+          (function(chunk){
+            importChain = importChain.then(function(){
+              return Promise.all(chunk.map(function(feat){
+                return gasCall('saveFeature', {feature: feat});
+              }));
+            });
+          })(featsToSave.slice(fi, fi + IMPORT_CHUNK));
+        }
         importChain.then(function(){
           window._importInProgress = false;
-          status.textContent = '✓ '+added+' added, '+updated+' updated — saved to Google Sheets';
+          status.textContent = '✓ '+added+' added, '+updated+' updated — refreshing from Google Sheets...';
+          status.style.color = '#d97706';
+          // Reload from GAS to ensure UI shows actual saved values (especially for QA owner changes)
+          return gasGet('loadAll', {});
+        }).then(function(data){
+          // Always re-render even on GAS timeout — rows saved locally are still correct
+          if(!data){
+            localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
+            renderFeatures();
+            status.textContent = '✓ '+added+' added, '+updated+' updated (GAS sync timed out — saved locally)';
+            status.style.color = '#d97706';
+            setTimeout(function(){ status.textContent=''; }, 5000);
+            return;
+          }
+          // Refresh features from GAS
+          if(data.features && data.features.length){
+            var deduped = {};
+            data.features.forEach(function(f){
+              if(!f.id) return;
+              if(!deduped[f.id]){
+                deduped[f.id] = f;
+              } else {
+                var existing = deduped[f.id];
+                Object.keys(f).forEach(function(k){
+                  if(k === 'deployed'){
+                    if(f[k] === '1' || existing[k] === '1') existing[k] = '1';
+                    else if(f[k]) existing[k] = f[k];
+                  } else {
+                    if(f[k] && !existing[k]) existing[k] = f[k];
+                  }
+                });
+              }
+            });
+            var uniqueFeats = Object.values ? Object.values(deduped) : Object.keys(deduped).map(function(k){ return deduped[k]; });
+            uniqueFeats.forEach(function(f){
+              if(!f.summary || !f.summary.trim()) return;
+              var seedIdx = FEATURES_DATA.findIndex(function(s){
+                return s.summary && s.summary.trim().substring(0,40) === f.summary.trim().substring(0,40);
+              });
+              if(seedIdx >= 0){
+                var seedF = FEATURES_DATA[seedIdx];
+                if(f.qa) seedF.qa = f.qa;
+                if(f.preprod && f.preprod !== '—') seedF.preprod = fmtDate(f.preprod);
+                if(f.committed && f.committed !== '—') seedF.committed = fmtDate(f.committed);
+                if(f.services) seedF.services = f.services;
+                if(f.automation && f.automation !== '—') seedF.automation = f.automation;
+                if(f.comments) { seedF.comments = f.comments; commentsData[seedIdx] = f.comments; }
+                if(f.effort) { seedF.effort = f.effort; effortData[seedIdx] = f.effort; }
+                if(f.notes) bugsData[seedIdx] = f.notes;
+                if(f.deployed === '1') deployedFeatures[seedIdx] = true;
+                else if(f.deployed === '0') delete deployedFeatures[seedIdx];
+              } else {
+                // Row is in GAS but not in local FEATURES_DATA — append it (e.g. added by another user)
+                var newIdx = FEATURES_DATA.length;
+                FEATURES_DATA.push({
+                  summary: f.summary.trim(), qa: f.qa||'', effort: f.effort||'',
+                  preprod: fmtDate(f.preprod||''), committed: fmtDate(f.committed||''),
+                  comments: f.comments||'', services: f.services||'', automation: f.automation||''
+                });
+                if(f.deployed === '1' || f.deployed === 'true') deployedFeatures[newIdx] = true;
+                if(f.effort)   effortData[newIdx]   = f.effort;
+                if(f.comments) commentsData[newIdx] = f.comments;
+                if(f.notes)    bugsData[newIdx]     = f.notes;
+              }
+            });
+          }
+          localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
+          renderFeatures();
+          status.textContent = '✓ '+added+' added, '+updated+' updated — synced to Google Sheets';
           status.style.color = '#16a34a';
           setTimeout(function(){ status.textContent=''; }, 4000);
         });
@@ -2329,9 +2492,11 @@ function addBug(idx){
   var bugSum = sumEl.value.trim();
   var bugSev = sevEl ? sevEl.value : 'P2';
   if(!bugId && !bugSum) return;
-  if(!bugsData[idx]) bugsData[idx] = [];
-  var newBug = {id:bugId, summary:bugSum, severity:bugSev, status:'Open', ts:new Date().toLocaleDateString()};
-  bugsData[idx].push(newBug);
+  // bugsData[idx] may be a string (saved via textarea) or array (legacy). Normalise to string.
+  var existing = bugsData[idx]||'';
+  if(Array.isArray(existing)) existing = existing.map(function(b){ return (b.id?b.id+': ':'')+b.summary; }).join('\n');
+  var newLine = (bugId ? bugId+': ' : '') + bugSum + (bugSev ? ' ['+bugSev+']' : '');
+  bugsData[idx] = existing ? existing+'\n'+newLine : newLine;
   var feat = FEATURES_DATA[idx];
   logChange(feat?feat.summary:'Feature '+idx, 'Bug Added', '—', (bugId?bugId+': ':'')+bugSum);
   localStorage.setItem('qa_tracker_v3', JSON.stringify({members, customSpans, deployedFeatures, effortData, commentsData, auditLog, bugsData, featuresData: FEATURES_DATA}));
@@ -2541,6 +2706,14 @@ function closeDeployReport(){
 
 function parseDR(s){
   if(!s || s==='—' || s.toLowerCase()==='pending' || s.toLowerCase()==='preprod date') return null;
+  // Handle "15 May 2026" or "15-May-2026" format
+  var m = String(s).match(/^(\d{1,2})[\s\-](\w{3})[\s\-](\d{4})$/);
+  if(m){
+    var months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+    var mo = months[m[2].toLowerCase()];
+    if(mo !== undefined) return new Date(parseInt(m[3]), mo, parseInt(m[1]));
+  }
+  // Handle YYYY-MM-DD format
   var d = new Date(s);
   return isNaN(d.getTime()) ? null : d;
 }
